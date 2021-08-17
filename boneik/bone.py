@@ -148,12 +148,17 @@ def vanilla_bone_loss(root: Bone, anchor_dict: Dict[Bone, torch.Tensor]):
     return loss
 
 
-def solve(root: Bone, anchor_dict: Dict[Bone, torch.Tensor]):
+def solve(
+    root: Bone,
+    anchor_dict: Dict[Bone, torch.Tensor],
+    max_epochs: int = 20,
+    min_rel_change: float = 1e-2,
+):
     opt = optim.LBFGS(
         [p for p in root.parameters() if p.requires_grad], history_size=10, max_iter=4
     )
     last_loss = 1e10
-    for e in range(5):
+    for e in range(max_epochs):
 
         def closure():
             opt.zero_grad()
@@ -163,7 +168,7 @@ def solve(root: Bone, anchor_dict: Dict[Bone, torch.Tensor]):
 
         opt.step(closure)
         loss = vanilla_bone_loss(root, anchor_dict).item()
-        if loss >= last_loss or (last_loss - loss) / last_loss < 1e-2:
+        if loss >= last_loss or (last_loss - loss) / last_loss < min_rel_change:
             break
         last_loss = loss
     print(f"Completed after {e} epochs, loss {loss}")
