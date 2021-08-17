@@ -7,6 +7,7 @@ import torch.optim as optim
 from torch.nn.parameter import Parameter
 import torch.distributions as dist
 import torch.distributions.constraints as constraints
+import matplotlib.pyplot as plt
 
 
 class RotDOF(torch.nn.Module):
@@ -117,16 +118,19 @@ def bone_loss(root: Bone, anchor_dict: Dict[str, torch.Tensor]):
 
 def solve(root: Bone, anchor_dict: Dict[str, torch.Tensor]):
 
-    opt = optim.Adam(
-        [p for p in root.parameters() if p.requires_grad],
-        lr=1e-1,
+    opt = optim.LBFGS(
+        [p for p in root.parameters() if p.requires_grad], history_size=10, max_iter=4
     )
-    for _ in range(100):
-        opt.zero_grad()
-        loss = bone_loss(root, anchor_dict)
-        loss.backward()
-        opt.step()
-        print(loss.item())
+    for _ in range(5):
+
+        def closure():
+            opt.zero_grad()
+            loss = bone_loss(root, anchor_dict)
+            loss.backward()
+            return loss
+
+        opt.step(closure)
+        print(bone_loss(root, anchor_dict).item())
 
 
 if __name__ == "__main__":
@@ -140,7 +144,21 @@ if __name__ == "__main__":
     b0.child_bones.append(b1)
     b1.child_bones.append(b2)
 
-    solve(b0, {"end": torch.Tensor([2.0, 0.0, 0])})
+    a_dict = {"1": torch.Tensor([1.0, 1.0, 0]), "end": torch.Tensor([2.0, 0.0, 0])}
+    solve(b0, a_dict)
 
+    fig, ax = plt.subplots()
+    for n, loc in a_dict.items():
+        ax.scatter([loc[0].item()], [loc[1].item()], c="k", marker="+")
+
+    prev_pos = [0, 0]
     for b, t in iterate_bones(b0):
         print(b.name, b.rot_z.angle, t[:3, 3])
+        pos = [t[0, 3].item(), t[1, 3].item()]
+        ax.plot([prev_pos[0], pos[0]], [prev_pos[1], pos[1]], c="green")
+        ax.scatter([pos[0]], [pos[1]], c="green")
+        prev_pos = pos
+
+    ax.set_xlim(-5, 5)
+    ax.set_ylim(-1, 5)
+    plt.show()
