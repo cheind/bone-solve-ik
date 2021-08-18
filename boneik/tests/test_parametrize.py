@@ -1,6 +1,9 @@
 import torch
 import numpy as np
 
+
+from boneik.reparametrize import PeriodicAngleReparametrization
+
 PI = np.pi
 PI2 = 2 * PI
 
@@ -16,35 +19,20 @@ def unconstrain(c: torch.Tensor, low: float = -PI, high: float = PI):
     return torch.tensor([torch.cos(a), torch.sin(a)])
 
 
-def test_angle_parametrization():
-    theta = torch.linspace(-PI, PI, 100)
+def test_periodic_angle_parametrization():
+    eps = np.finfo(np.float32).eps
+    theta = torch.linspace(-PI + eps, PI - eps, 100)
     z = torch.stack([torch.cos(theta), torch.sin(theta)], -1)
-    z = z.requires_grad_(True)
-    c = constrain(z, low=-0.05, high=0.05)
-    # print(torch.autograd.grad(c[0], z))
-    plot_gradients(c, z)
+    # z = z.requires_grad_(True)
+    reparam = PeriodicAngleReparametrization()
+    a = reparam(z)
+    assert torch.allclose(theta, a, atol=1e-4)
 
-    # z = unconstrain(torch.tensor([0]))
-    # print(z)
-    # print(constrain(z))
-
-
-def plot_gradients(c, z):
-    import matplotlib.pyplot as plt
-
-    fig, axs = plt.subplots(2, 1, sharex=True)
-    grads = torch.stack(
-        [
-            torch.autograd.grad(c[i], z, retain_graph=True)[0][i].detach()
-            for i in range(len(z))
-        ],
-        0,
-    )
-    print(z.shape, grads.shape)
-    print(z[:, 0])
-
-    #
-    # ]
-    axs[0].plot(z[:, 0].detach(), grads[:, 0])
-    axs[1].plot(z[:, 1].detach(), grads[:, 1])
-    plt.show()
+    theta = torch.linspace(-0.1 + eps, 0.1 - eps, 100)
+    reparam = PeriodicAngleReparametrization((-0.1, 0.1))
+    z = reparam.inv(theta)
+    # The complex numbers should cover 2pi.
+    aa = torch.angle(torch.view_as_complex(z))
+    assert torch.allclose(aa[-1] - aa[0], torch.tensor([2 * np.pi]))
+    a = reparam(reparam.inv(theta))
+    assert torch.allclose(theta, a, atol=1e-4)

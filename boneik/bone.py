@@ -103,7 +103,7 @@ def solve(
     for dof in dof_dict.values():
         params.extend([p for p in dof.parameters() if p.requires_grad])
 
-    opt = optim.LBFGS(params, history_size=10, max_iter=4)
+    opt = optim.LBFGS(params, history_size=10, max_iter=4, lr=1)
     last_loss = 1e10
     for e in range(max_epochs):
 
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     b0.link_to(b1).link_to(b2)
 
     dof_dict = {
-        b0: BoneDOF(rotz=RotZ(interval=(-0.5, 0.5))),
+        b0: BoneDOF(rotz=RotZ()),
         b1: BoneDOF(rotz=RotZ()),
     }
 
@@ -149,7 +149,12 @@ if __name__ == "__main__":
         fk_dict = fk(b0, dof_dict)
         for bone in bfs(b0):
             if bone in dof_dict:
-                print(bone.name, dof_dict[bone].rotz.angle)
+                print(
+                    bone.name,
+                    dof_dict[bone].rotz.angle,
+                    dof_dict[bone].rotz.uangle,
+                    dof_dict[bone].rotz.uangle.grad,
+                )
             tb = fk_dict[bone][:2, 3].numpy()
             if bone.parent is not None:
                 tp = fk_dict[bone.parent][:2, 3].numpy()
