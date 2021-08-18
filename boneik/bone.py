@@ -8,31 +8,48 @@ import torch.optim as optim
 from .dof import RotX, RotY, RotZ
 
 
-class Bone(torch.nn.Module):
+class BoneDOF(torch.nn.Module):
+    def __init__(
+        self,
+        rotx: Optional[RotX] = None,
+        roty: Optional[RotY] = None,
+        rotz: Optional[RotZ] = None,
+    ):
+        super().__init__()
+        if rotx is None:
+            rotx = RotX(unlocked=False)
+        if roty is None:
+            roty = RotX(unlocked=False)
+        if rotz is None:
+            rotz = RotZ(unlocked=False)
+        self.rotx = rotx
+        self.roty = roty
+        self.rotz = rotz
+
+    def matrix(self):
+        return self.rotx.matrix() @ self.roty.matrix() @ self.rotz.matrix()
+
+
+class Bone:
     def __init__(
         self,
         name: str,
-        children: Optional[List["Bone"]] = None,
-        t_rest: torch.Tensor = torch.eye(4),
+        t: torch.Tensor = None,
     ):
         super().__init__()
         self.name = name
-        self.child_bones = torch.nn.ModuleList(children)
-        self.t_rest = t_rest
-        self.rot_x = RotX()
-        self.rot_y = RotY()
-        self.rot_z = RotZ()
+        self.children = []
+        self.parent = None
+        if t is None:
+            t = torch.eye(4)
+        self.t = t
 
     def matrix(self):
-        return (
-            self.t_rest
-            @ self.rot_x.matrix()
-            @ self.rot_y.matrix()
-            @ self.rot_z.matrix()
-        )
+        return self.t
 
     def link_to(self, other: "Bone"):
-        self.child_bones.append(other)
+        self.children.append(other)
+        other.parent = self
         return other
 
     def __hash__(self):
@@ -42,31 +59,34 @@ class Bone(torch.nn.Module):
         return self.name == other.name
 
 
+BoneTensorDict = Dict[Bone, torch.Tensor]
+BoneDOFDict = Dict[Bone, BoneDOF]
+
+
 def bfs(root: Bone):
     """Breadth-first search over kinematic starting at root."""
-    queue = [(root, None)]
+    queue = [root]
     while queue:
-        b, parent = queue.pop(0)
-        yield b, parent
-        queue.extend([(c, b) for c in b.child_bones])
+        b = queue.pop(0)
+        yield b
+        queue.extend([c for c in b.children])
 
 
-def fk(root: Bone, root_pose: torch.Tensor = None) -> Dict[Bone, torch.Tensor]:
+def fk(root: Bone, dof_dict: BoneDOFDict = None) -> BoneTensorDict:
     """Computes the forward kinematic poses of each bone."""
-    if root_pose is None:
-        root_pose = torch.eye(4)
     fk_dict = {}
-    for bone, parent in bfs(root):
-        if parent is None:
-            fk_dict[bone] = root_pose @ bone.matrix()
-        else:
-            fk_dict[bone] = fk_dict[parent] @ bone.matrix()
+    for bone in bfs(root):
+        fk_prev = torch.eye(4) if bone.parent is None else fk_dict[bone.parent]
+        t_dof = torch.eye(4)
+        if bone in dof_dict:
+            t_dof = dof_dict[bone].matrix()
+        fk_dict[bone] = fk_prev @ bone.matrix() @ t_dof
     return fk_dict
 
 
-def vanilla_bone_loss(root: Bone, anchor_dict: Dict[Bone, torch.Tensor]):
+def vanilla_bone_loss(root: Bone, dof_dict: BoneDOFDict, anchor_dict: BoneTensorDict):
     loss = 0.0
-    fk_dict = fk(root)
+    fk_dict = fk(root, dof_dict=dof_dict)
     for bone, loc in anchor_dict.items():
         loss += ((loc - fk_dict[bone][:3, 3]) ** 2).sum()
     return loss
@@ -74,24 +94,27 @@ def vanilla_bone_loss(root: Bone, anchor_dict: Dict[Bone, torch.Tensor]):
 
 def solve(
     root: Bone,
-    anchor_dict: Dict[Bone, torch.Tensor],
+    dof_dict: BoneDOFDict,
+    anchor_dict: BoneTensorDict,
     max_epochs: int = 20,
     min_rel_change: float = 1e-2,
 ):
-    opt = optim.LBFGS(
-        [p for p in root.parameters() if p.requires_grad], history_size=10, max_iter=4
-    )
+    params = []
+    for dof in dof_dict.values():
+        params.extend([p for p in dof.parameters() if p.requires_grad])
+
+    opt = optim.LBFGS(params, history_size=10, max_iter=4)
     last_loss = 1e10
     for e in range(max_epochs):
 
         def closure():
             opt.zero_grad()
-            loss = vanilla_bone_loss(root, anchor_dict)
+            loss = vanilla_bone_loss(root, dof_dict, anchor_dict)
             loss.backward()
             return loss
 
         opt.step(closure)
-        loss = vanilla_bone_loss(root, anchor_dict).item()
+        loss = vanilla_bone_loss(root, dof_dict, anchor_dict).item()
         if loss >= last_loss or (last_loss - loss) / last_loss < min_rel_change:
             break
         last_loss = loss
@@ -102,31 +125,37 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     b0 = Bone("0")
-    b1 = Bone("1", t_rest=torch.Tensor(T.translation_matrix([0, 1.0, 0])))
-    b2 = Bone("end", t_rest=torch.Tensor(T.translation_matrix([0, 1.0, 0])))
-
-    b0.rot_z.unlock((-0.5, 0.5))
-    b1.rot_z.unlock()
+    b1 = Bone("1", t=torch.Tensor(T.translation_matrix([0, 1.0, 0])))
+    b2 = Bone("end", t=torch.Tensor(T.translation_matrix([0, 1.0, 0])))
     b0.link_to(b1).link_to(b2)
 
-    a_dict = {b1: torch.Tensor([1.0, 1.0, 0]), b2: torch.Tensor([2.0, 0.0, 0])}
-    solve(b0, a_dict)
+    dof_dict = {
+        b0: BoneDOF(rotz=RotZ(interval=(-0.5, 0.5))),
+        b1: BoneDOF(rotz=RotZ()),
+    }
+
+    anchor_dict = {
+        b1: torch.Tensor([1.0, 1.0, 0]),
+        b2: torch.Tensor([2.0, 0.0, 0]),
+    }
+    solve(b0, dof_dict, anchor_dict)
 
     # Plot anchors
     fig, ax = plt.subplots()
-    for n, loc in a_dict.items():
+    for n, loc in anchor_dict.items():
         ax.scatter([loc[0].item()], [loc[1].item()], c="k", marker="+")
 
     with torch.no_grad():
-        fk_dict = fk(b0)
-        for bone, parent in bfs(b0):
-            print(bone.name, bone.rot_z.angle)
+        fk_dict = fk(b0, dof_dict)
+        for bone in bfs(b0):
+            if bone in dof_dict:
+                print(bone.name, dof_dict[bone].rotz.angle)
             tb = fk_dict[bone][:2, 3].numpy()
-            if parent is not None:
-                tp = fk_dict[parent][:2, 3].numpy()
+            if bone.parent is not None:
+                tp = fk_dict[bone.parent][:2, 3].numpy()
                 ax.plot([tp[0], tb[0]], [tp[1], tb[1]], c="green")
             ax.scatter([tb[0]], [tb[1]], c="green")
 
         ax.set_xlim(-5, 5)
         ax.set_ylim(-1, 5)
-        plt.show()
+    plt.show()

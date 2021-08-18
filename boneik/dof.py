@@ -11,11 +11,11 @@ class RotDOF(torch.nn.Module):
     def __init__(
         self,
         angle: float = 0.0,
-        constraint_interval: Tuple[float, float] = (-np.pi, np.pi),
-        unlocked: bool = False,
+        interval: Tuple[float, float] = (-np.pi, np.pi),
+        unlocked: bool = True,
     ):
         super().__init__()
-        self.reparam = AngleReparametrization(constraint_interval)
+        self.reparam = AngleReparametrization(interval)
         self.uangle = Parameter(
             self.reparam.inv(torch.tensor([angle])), requires_grad=unlocked
         )
@@ -24,10 +24,10 @@ class RotDOF(torch.nn.Module):
     def angle(self):
         return self.reparam(self.uangle)
 
-    def unlock(self, constraint_interval: Tuple[float, float] = None):
-        if constraint_interval is not None:
+    def unlock(self, interval: Tuple[float, float] = None):
+        if interval is not None:
             angle = self.reparam(self.uangle)
-            self.reparam = AngleReparametrization(constraint_interval)
+            self.reparam = AngleReparametrization(interval)
             self.uangle.data[:] = self.reparam.inv(torch.tensor([angle]))
         self.uangle.requires_grad_(True)
 
