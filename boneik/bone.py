@@ -5,8 +5,8 @@ import torch.nn
 import transformations as T
 import torch.optim as optim
 from torch.nn.parameter import Parameter
-import torch.distributions as dist
-import torch.distributions.constraints as constraints
+
+from .reparametrize import AngleReparametrization
 
 
 class RotDOF(torch.nn.Module):
@@ -17,28 +17,20 @@ class RotDOF(torch.nn.Module):
         unlocked: bool = False,
     ):
         super().__init__()
-        self.constr = dist.transform_to(
-            constraints.half_open_interval(
-                constraint_interval[0], constraint_interval[1]
-            )
-        )
+        self.reparam = AngleReparametrization(constraint_interval)
         self.uangle = Parameter(
-            self.constr.inv(torch.tensor([angle])), requires_grad=unlocked
+            self.reparam.inv(torch.tensor([angle])), requires_grad=unlocked
         )
 
     @property
     def angle(self):
-        return self.constr(self.uangle)
+        return self.reparam(self.uangle)
 
     def unlock(self, constraint_interval: Tuple[float, float] = None):
         if constraint_interval is not None:
-            angle = self.constr(self.uangle)
-            self.constr = dist.transform_to(
-                constraints.half_open_interval(
-                    constraint_interval[0], constraint_interval[1]
-                )
-            )
-            self.uangle.data[:] = self.constr.inv(torch.tensor([angle]))
+            angle = self.reparam(self.uangle)
+            self.reparam = AngleReparametrization(constraint_interval)
+            self.uangle.data[:] = self.reparam.inv(torch.tensor([angle]))
         self.uangle.requires_grad_(True)
 
     def matrix(self) -> torch.Tensor:
