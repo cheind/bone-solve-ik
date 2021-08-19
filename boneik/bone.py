@@ -6,6 +6,7 @@ import transformations as T
 import torch.optim as optim
 
 from .dof import RotX, RotY, RotZ
+from .reparametrize import PI
 
 
 class BoneDOF(torch.nn.Module):
@@ -136,7 +137,7 @@ if __name__ == "__main__":
 
     anchor_dict = {
         b1: torch.Tensor([1.0, 1.0, 0]),
-        b2: torch.Tensor([2.0, 0.0, 0]),
+        # b2: torch.Tensor([2.0, 0.0, 0]),
     }
     solve(b0, dof_dict, anchor_dict)
 

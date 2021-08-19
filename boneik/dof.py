@@ -5,8 +5,9 @@ import torch
 from torch.nn.parameter import Parameter
 
 from .reparametrize import (
-    PeriodicAngleReparametrization,
-    NonPeriodicAngleReparametrization,
+    # PeriodicAngleReparametrization,
+    # NonPeriodicAngleReparametrization,
+    AngleReparametrization,
 )
 
 
@@ -18,20 +19,21 @@ class RotDOF(torch.nn.Module):
         unlocked: bool = True,
     ):
         super().__init__()
-        self.reparam = NonPeriodicAngleReparametrization(interval)
+        self.reparam = AngleReparametrization(interval)
         self.uangle = Parameter(
-            self.reparam.inv(torch.tensor([angle])), requires_grad=unlocked
+            self.reparam.inv(torch.tensor(angle)), requires_grad=unlocked
         )
 
     @property
     def angle(self):
-        return self.reparam(self.uangle)
+        z = self.reparam(self.uangle)
+        return torch.atan2(z[1], z[0])
 
     def unlock(self, interval: Tuple[float, float] = None):
         if interval is not None:
-            angle = self.reparam(self.uangle)
-            self.reparam = NonPeriodicAngleReparametrization(interval)
-            self.uangle.data[:] = self.reparam.inv(torch.tensor([angle]))
+            angle = self.angle
+            self.reparam = AngleReparametrization(interval)
+            self.uangle.data[:] = self.reparam.inv(torch.tensor(angle))
         self.uangle.requires_grad_(True)
 
     def matrix(self) -> torch.Tensor:
@@ -40,9 +42,8 @@ class RotDOF(torch.nn.Module):
 
 class RotX(RotDOF):
     def matrix(self) -> torch.Tensor:
-        a = self.angle
-        c = torch.cos(a)
-        s = torch.sin(a)
+        print(self.reparam(self.uangle))
+        c, s = self.reparam(self.uangle)
         m = torch.eye(4)
         m[1, 1] = c
         m[1, 2] = -s
@@ -53,9 +54,7 @@ class RotX(RotDOF):
 
 class RotY(RotDOF):
     def matrix(self) -> torch.Tensor:
-        a = self.angle
-        c = torch.cos(a)
-        s = torch.sin(a)
+        c, s = self.reparam(self.uangle)
         m = torch.eye(4)
         m[0, 0] = c
         m[0, 2] = s
@@ -66,9 +65,8 @@ class RotY(RotDOF):
 
 class RotZ(RotDOF):
     def matrix(self) -> torch.Tensor:
-        a = self.angle
-        c = torch.cos(a)
-        s = torch.sin(a)
+        print(self.reparam(self.uangle))
+        c, s = self.reparam(self.uangle)
         m = torch.eye(4)
         m[0, 0] = c
         m[0, 1] = -s
