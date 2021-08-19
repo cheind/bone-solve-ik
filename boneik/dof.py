@@ -3,6 +3,7 @@ from typing import Tuple
 import numpy as np
 import torch
 from torch.nn.parameter import Parameter
+import torch.nn.functional as F
 
 from .reparametrize import (
     # PeriodicAngleReparametrization,
@@ -14,36 +15,37 @@ from .reparametrize import (
 class RotDOF(torch.nn.Module):
     def __init__(
         self,
+        *,
         angle: float = 0.0,
         interval: Tuple[float, float] = (-np.pi, np.pi),
         unlocked: bool = True,
     ):
         super().__init__()
         self.reparam = AngleReparametrization(interval)
-        self.uangle = Parameter(
-            self.reparam.inv(torch.tensor(angle)), requires_grad=unlocked
-        )
+        self.uangle = Parameter(self.reparam.angle2log(angle), requires_grad=unlocked)
 
     @property
     def angle(self):
-        z = self.reparam(self.uangle)
-        return torch.atan2(z[1], z[0])
+        return self.reparam.log2angle(self.uangle)
 
     def unlock(self, interval: Tuple[float, float] = None):
         if interval is not None:
             angle = self.angle
             self.reparam = AngleReparametrization(interval)
-            self.uangle.data[:] = self.reparam.inv(torch.tensor(angle))
+            self.uangle.data[:] = self.reparam.angle2log(angle)
         self.uangle.requires_grad_(True)
 
     def matrix(self) -> torch.Tensor:
         raise NotImplementedError
 
+    @torch.no_grad()
+    def normalize(self):
+        self.uangle.data[:] = F.normalize(self.uangle, dim=-1)
+
 
 class RotX(RotDOF):
     def matrix(self) -> torch.Tensor:
-        print(self.reparam(self.uangle))
-        c, s = self.reparam(self.uangle)
+        c, s = self.reparam.exp(self.uangle)
         m = torch.eye(4)
         m[1, 1] = c
         m[1, 2] = -s
@@ -54,7 +56,7 @@ class RotX(RotDOF):
 
 class RotY(RotDOF):
     def matrix(self) -> torch.Tensor:
-        c, s = self.reparam(self.uangle)
+        c, s = self.reparam.exp(self.uangle)
         m = torch.eye(4)
         m[0, 0] = c
         m[0, 2] = s
@@ -65,8 +67,7 @@ class RotY(RotDOF):
 
 class RotZ(RotDOF):
     def matrix(self) -> torch.Tensor:
-        print(self.reparam(self.uangle))
-        c, s = self.reparam(self.uangle)
+        c, s = self.reparam.exp(self.uangle)
         m = torch.eye(4)
         m[0, 0] = c
         m[0, 1] = -s

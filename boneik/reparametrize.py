@@ -75,13 +75,25 @@ class AngleReparametrization:
             self.loc = torch.tensor([0, 0.0])
             self.rot = torch.tensor(1 + 0j)
 
-    def __call__(self, z: torch.Tensor) -> torch.Tensor:
-        z = F.tanh(z) * self.scale + self.loc
+    def exp(self, z: torch.Tensor) -> torch.Tensor:
+        z = torch.tanh(z) * self.scale + self.loc
         z = torch.view_as_real(torch.view_as_complex(z) * self.rot)
         return F.normalize(z, dim=-1)
 
-    def inv(self, angle: torch.Tensor) -> torch.Tensor:
-        z = torch.stack((torch.cos(angle), torch.sin(angle)), -1)
-        z = torch.view_as_real(torch.view_as_complex(z) * torch.conj(self.rot))
-        z = (z - self.loc) / self.scale
-        return z
+    def log(self, z: torch.Tensor) -> torch.Tensor:
+        z = torch.view_as_complex(z) * torch.conj(self.rot)
+        return (torch.view_as_real(z) - self.loc) / self.scale
+
+    def angle2exp(self, angle: torch.Tensor) -> torch.Tensor:
+        angle = torch.as_tensor(angle)
+        lg = torch.tensor([torch.cos(angle), torch.sin(angle)])
+        return self.exp(lg)
+
+    def angle2log(self, angle: torch.Tensor) -> torch.Tensor:
+        angle = torch.as_tensor(angle)
+        e = self.angle2exp(angle)
+        return self.log(e)
+
+    def log2angle(self, z: torch.Tensor) -> torch.Tensor:
+        e = self.exp(z)
+        return torch.atan2(e[1], e[0])

@@ -30,6 +30,11 @@ class BoneDOF(torch.nn.Module):
     def matrix(self):
         return self.rotx.matrix() @ self.roty.matrix() @ self.rotz.matrix()
 
+    def normalize(self):
+        self.rotx.normalize()
+        self.roty.normalize()
+        self.rotz.normalize()
+
 
 class Bone:
     def __init__(
@@ -97,29 +102,36 @@ def solve(
     root: Bone,
     dof_dict: BoneDOFDict,
     anchor_dict: BoneTensorDict,
-    max_epochs: int = 20,
-    min_rel_change: float = 1e-2,
+    max_epochs: int = 100,
+    min_rel_change: float = 1e-4,
+    lr: float = 1e0,
 ):
     params = []
     for dof in dof_dict.values():
         params.extend([p for p in dof.parameters() if p.requires_grad])
 
-    opt = optim.LBFGS(params, history_size=10, max_iter=4, lr=1)
+    opt = optim.LBFGS(params, history_size=10, max_iter=4, lr=lr)
     last_loss = 1e10
     for e in range(max_epochs):
 
         def closure():
             opt.zero_grad()
             loss = vanilla_bone_loss(root, dof_dict, anchor_dict)
+            for bdof in dof_dict.values():
+                bdof.normalize()
             loss.backward()
             return loss
 
         opt.step(closure)
+        # normalize
+
         loss = vanilla_bone_loss(root, dof_dict, anchor_dict).item()
         if loss >= last_loss or (last_loss - loss) / last_loss < min_rel_change:
             break
+        for bdof in dof_dict.values():
+            bdof.normalize()
         last_loss = loss
-    print(f"Completed after {e} epochs, loss {loss}")
+    print(f"Completed after {e+1} epochs, loss {loss}")
 
 
 if __name__ == "__main__":
@@ -131,13 +143,17 @@ if __name__ == "__main__":
     b0.link_to(b1).link_to(b2)
 
     dof_dict = {
-        b0: BoneDOF(rotz=RotZ(interval=(-PI / 4 + 0.2, PI / 4 + 0.2))),
+        b0: BoneDOF(rotz=RotZ()),  # interval=(-PI / 4, PI / 4)
         b1: BoneDOF(rotz=RotZ()),
     }
 
+    anchor_dict = {b2: torch.tensor([2.0, 0, 0.0000])}
+    solve(b0, dof_dict, anchor_dict)
+
     anchor_dict = {
-        b1: torch.Tensor([1.0, 1.0, 0]),
-        b2: torch.Tensor([2.0, 0.0, 0]),
+        # b1: torch.Tensor([1.0, 1.0, 0]),
+        # b2: torch.Tensor([2.0, 0.0, 0]),
+        b2: torch.tensor([-3.6342, -3.9752, 0.0000])
     }
     solve(b0, dof_dict, anchor_dict)
 
@@ -163,5 +179,5 @@ if __name__ == "__main__":
             ax.scatter([tb[0]], [tb[1]], c="green")
 
         ax.set_xlim(-5, 5)
-        ax.set_ylim(-1, 5)
+        ax.set_ylim(-5, 5)
     plt.show()
