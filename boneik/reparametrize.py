@@ -52,7 +52,6 @@ class PeriodicAngleReparametrization:
 
 class AngleReparametrization:
     def __init__(self, interval: Tuple[float, float] = (-np.pi, np.pi)) -> None:
-        # Note,
         r = torch.tensor(interval[1] - interval[0])
         is_pihalf = torch.allclose(r, torch.tensor(PI * 0.5), atol=1e-3)
         is_pi = torch.allclose(r, torch.tensor(PI), atol=1e-3)
@@ -63,17 +62,13 @@ class AngleReparametrization:
         if is_pihalf:
             # map -1..1/-1..1 -> 0..1/0..1
             self.scale = torch.tensor([0.5, 0.5])
-            self.loc = torch.tensor([1.0, 1.0])
-            self.rot = torch.view_as_complex(
-                torch.tensor([np.cos(interval[0]), np.sin(interval[0])])
-            )
+            self.loc = torch.tensor([0.5, 0.5])
+            self.rot = torch.tensor(np.cos(interval[0]) + 1j * np.sin(interval[0]))
         elif is_pi:
             # map -1..1/-1..1 -> -1..1/0..1
             self.scale = torch.tensor([1.0, 0.5])
-            self.loc = torch.tensor([0, 1.0])
-            self.rot = torch.view_as_complex(
-                torch.tensor([np.cos(interval[0]), np.sin(interval[0])])
-            )
+            self.loc = torch.tensor([0, 0.5])
+            self.rot = torch.tensor(np.cos(interval[0]) + 1j * np.sin(interval[0]))
         else:
             # map -1..1/-1..1 ->     -1..1/-1..1
             self.scale = torch.tensor([1.0, 1.0])

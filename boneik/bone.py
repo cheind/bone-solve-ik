@@ -131,13 +131,13 @@ if __name__ == "__main__":
     b0.link_to(b1).link_to(b2)
 
     dof_dict = {
-        b0: BoneDOF(rotz=RotZ()),
+        b0: BoneDOF(rotz=RotZ(interval=(-PI / 4 + 0.2, PI / 4 + 0.2))),
         b1: BoneDOF(rotz=RotZ()),
     }
 
     anchor_dict = {
         b1: torch.Tensor([1.0, 1.0, 0]),
-        # b2: torch.Tensor([2.0, 0.0, 0]),
+        b2: torch.Tensor([2.0, 0.0, 0]),
     }
     solve(b0, dof_dict, anchor_dict)
 
