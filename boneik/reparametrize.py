@@ -50,7 +50,7 @@ class PeriodicAngleReparametrization:
         return torch.stack((torch.cos(f), torch.sin(f)), -1)
 
 
-class AngleReparametrization:
+class AngleReparametrizationOld:
     def __init__(self, interval: Tuple[float, float] = (-np.pi, np.pi)) -> None:
         r = torch.tensor(interval[1] - interval[0])
         is_pihalf = torch.allclose(r, torch.tensor(PI * 0.5), atol=1e-3)
@@ -94,6 +94,58 @@ class AngleReparametrization:
         e = self.angle2exp(angle)
         return self.log(e)
 
+    def log2angle(self, z: torch.Tensor) -> torch.Tensor:
+        e = self.exp(z)
+        return torch.atan2(e[1], e[0])
+
+
+class AngleReparametrization:
+    def __init__(self, interval: Tuple[float, float] = (-np.pi, np.pi)) -> None:
+        self.i = torch.tensor(interval)
+        self.length = interval[1] - interval[0]
+        assert self.length > 0, "Interval must be greater than zero"
+        self.is_unconstrained = abs(self.length - 2 * PI) < 1e-4
+        self.scale = self.length / (2 * PI)
+        self.loc = interval[0]
+
+    def exp(self, z: torch.Tensor) -> torch.Tensor:
+        z = torch.view_as_complex(F.normalize(z, dim=-1))
+        r = self._compute_u2c_rotation(z)
+        f = torch.view_as_real(z * r)
+        return f
+
+    def log(self, z: torch.Tensor) -> torch.Tensor:
+        z = torch.view_as_complex(z)
+        r = self._compute_c2u_rotation(z)
+        return torch.view_as_real(z * r)
+
+    @torch.no_grad()
+    def _compute_u2c_rotation(self, z: torch.Tensor) -> torch.Tensor:
+        if self.is_unconstrained:
+            return torch.tensor(1 + 0j)
+        theta = torch.angle(z)  # -pi..pi
+        theta_hat = (theta - (-PI)) * self.scale + self.i[0]
+        theta_diff = theta_hat - theta
+        r = torch.cos(theta_diff) + 1j * torch.sin(theta_diff)
+        print("diff", theta_diff, z * r)
+        return r
+
+    @torch.no_grad()
+    def _compute_c2u_rotation(self, z: torch.Tensor) -> torch.Tensor:
+        if self.is_unconstrained:
+            return torch.tensor(1 + 0j)
+        theta_hat = torch.angle(z)  # -pi..pi
+        theta = (theta_hat - self.i[0]) / self.scale + (-PI)
+        theta_diff = theta - theta_hat
+        return torch.cos(theta_diff) + 1j * torch.sin(theta_diff)
+
+    @torch.no_grad()
+    def angle2log(self, theta: torch.Tensor) -> torch.Tensor:
+        theta = torch.as_tensor(theta)
+        z = torch.tensor([torch.cos(theta), torch.sin(theta)])
+        return self.log(z)
+
+    @torch.no_grad()
     def log2angle(self, z: torch.Tensor) -> torch.Tensor:
         e = self.exp(z)
         return torch.atan2(e[1], e[0])

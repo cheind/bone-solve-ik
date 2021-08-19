@@ -64,6 +64,12 @@ class Bone:
     def __eq__(self, other: "Bone"):
         return self.name == other.name
 
+    def __str__(self) -> str:
+        return f"Bone(name={self.name})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
 
 BoneTensorDict = Dict[Bone, torch.Tensor]
 BoneDOFDict = Dict[Bone, BoneDOF]
@@ -94,7 +100,10 @@ def vanilla_bone_loss(root: Bone, dof_dict: BoneDOFDict, anchor_dict: BoneTensor
     loss = 0.0
     fk_dict = fk(root, dof_dict=dof_dict)
     for bone, loc in anchor_dict.items():
-        loss += ((loc - fk_dict[bone][:3, 3]) ** 2).sum()
+        l = ((loc - fk_dict[bone][:3, 3]) ** 2).sum()
+        if bone in dof_dict:
+            print(bone.name, l.item(), dof_dict[bone].rotz.matrix())
+        loss += l
     return loss
 
 
@@ -103,8 +112,8 @@ def solve(
     dof_dict: BoneDOFDict,
     anchor_dict: BoneTensorDict,
     max_epochs: int = 100,
-    min_rel_change: float = 1e-4,
-    lr: float = 1e0,
+    min_rel_change: float = 1e-5,
+    lr: float = 1e-2,
 ):
     params = []
     for dof in dof_dict.values():
@@ -117,19 +126,15 @@ def solve(
         def closure():
             opt.zero_grad()
             loss = vanilla_bone_loss(root, dof_dict, anchor_dict)
-            for bdof in dof_dict.values():
-                bdof.normalize()
             loss.backward()
             return loss
 
         opt.step(closure)
         # normalize
-
         loss = vanilla_bone_loss(root, dof_dict, anchor_dict).item()
+        print(loss)
         if loss >= last_loss or (last_loss - loss) / last_loss < min_rel_change:
             break
-        for bdof in dof_dict.values():
-            bdof.normalize()
         last_loss = loss
     print(f"Completed after {e+1} epochs, loss {loss}")
 
@@ -143,19 +148,23 @@ if __name__ == "__main__":
     b0.link_to(b1).link_to(b2)
 
     dof_dict = {
-        b0: BoneDOF(rotz=RotZ()),  # interval=(-PI / 4, PI / 4)
+        b0: BoneDOF(rotz=RotZ(interval=(-PI / 4, PI / 4))),  #
         b1: BoneDOF(rotz=RotZ()),
     }
 
-    anchor_dict = {b2: torch.tensor([2.0, 0, 0.0000])}
+    anchor_dict = {
+        b1: torch.Tensor([1.2, 1.0, 0]),
+        b2: torch.Tensor([2.0, 0.0, 0]),
+    }
+
     solve(b0, dof_dict, anchor_dict)
 
-    anchor_dict = {
-        # b1: torch.Tensor([1.0, 1.0, 0]),
-        # b2: torch.Tensor([2.0, 0.0, 0]),
-        b2: torch.tensor([-3.6342, -3.9752, 0.0000])
-    }
-    solve(b0, dof_dict, anchor_dict)
+    # anchor_dict = {
+    #     # b1: torch.Tensor([1.0, 1.0, 0]),
+    #     # b2: torch.Tensor([2.0, 0.0, 0]),
+    #     b2: torch.tensor([-3.6342, -3.9752, 0.0000])
+    # }
+    # solve(b0, dof_dict, anchor_dict)
 
     # Plot anchors
     fig, ax = plt.subplots()
