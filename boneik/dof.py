@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from .reparametrize import (
     # PeriodicAngleReparametrization,
     # NonPeriodicAngleReparametrization,
-    AngleReparametrization,
+    ConstrainedAngleReparametrization,
 )
 
 
@@ -17,11 +17,11 @@ class RotDOF(torch.nn.Module):
         self,
         *,
         angle: float = 0.0,
-        interval: Tuple[float, float] = (-np.pi, np.pi),
+        interval: Tuple[float, float] = None,
         unlocked: bool = True,
     ):
         super().__init__()
-        self.reparam = AngleReparametrization(interval)
+        self.reparam = ConstrainedAngleReparametrization(interval)
         self.uangle = Parameter(self.reparam.angle2log(angle), requires_grad=unlocked)
 
     @property
@@ -31,7 +31,7 @@ class RotDOF(torch.nn.Module):
     def unlock(self, interval: Tuple[float, float] = None):
         if interval is not None:
             angle = self.angle
-            self.reparam = AngleReparametrization(interval)
+            self.reparam = ConstrainedAngleReparametrization(interval)
             self.uangle.data[:] = self.reparam.angle2log(angle)
         self.uangle.requires_grad_(True)
 

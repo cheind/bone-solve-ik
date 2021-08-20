@@ -112,8 +112,8 @@ def solve(
     dof_dict: BoneDOFDict,
     anchor_dict: BoneTensorDict,
     max_epochs: int = 100,
-    min_rel_change: float = 1e-5,
-    lr: float = 1e-2,
+    min_rel_change: float = 1e-4,
+    lr: float = 1e-0,
 ):
     params = []
     for dof in dof_dict.values():
@@ -157,14 +157,14 @@ if __name__ == "__main__":
         b2: torch.Tensor([2.0, 0.0, 0]),
     }
 
-    solve(b0, dof_dict, anchor_dict)
-
-    # anchor_dict = {
-    #     # b1: torch.Tensor([1.0, 1.0, 0]),
-    #     # b2: torch.Tensor([2.0, 0.0, 0]),
-    #     b2: torch.tensor([-3.6342, -3.9752, 0.0000])
-    # }
     # solve(b0, dof_dict, anchor_dict)
+
+    anchor_dict = {
+        # b1: torch.Tensor([1.0, 1.0, 0]),
+        # b2: torch.Tensor([2.0, 0.0, 0]),
+        b2: torch.tensor([-3.6342, -3.9752, 0.0000])
+    }
+    solve(b0, dof_dict, anchor_dict)
 
     # Plot anchors
     fig, ax = plt.subplots()
