@@ -8,7 +8,16 @@ PI2 = 2 * PI
 
 
 class ConstrainedAngleReparametrization:
-    """Reparametrize an contrained angle for unconstrained optimization."""
+    """Reparametrize an contrained angle for unconstrained optimization.
+
+    The unconstrained angle is represented by unbounded 2 reals, (x,y), living
+    on the Euclidean plane in R2. The constrained angle, a, is represented
+    by the corresponding the unit complex number such that z = cos(a) + i sin(a),
+    where x is an angle within a user specified interval.
+
+        z   = f(x,y)
+            = norm(affine(tanh(x,y))
+    """
 
     def __init__(self, interval: Optional[Tuple[float, float]] = None) -> None:
         if interval is None:
@@ -24,7 +33,6 @@ class ConstrainedAngleReparametrization:
         ), "Constrained interval must be <= PI."
         self._init_affine()
 
-    @torch.no_grad()
     def _init_affine(self):
         if self.is_constrained:
             theta = self.length / 2
@@ -49,25 +57,22 @@ class ConstrainedAngleReparametrization:
 
     def exp(self, z: torch.Tensor) -> torch.Tensor:
         z = torch.tanh(z)
-        zh = torch.ones(3, 1)
-        zh[:2, 0] = z
-        z = (self.affine @ zh)[:2, 0]
-        z = F.normalize(z, dim=-1)
+        z = F.pad(z, (0, 1), "constant", 1)
+        z = self.affine @ z
+        z = F.normalize(z[:2], dim=-1)
         return z
 
     def log(self, z: torch.Tensor) -> torch.Tensor:
-        zh = torch.ones(3, 1)
-        zh[:2, 0] = z
-        z = (self.inv_affine @ zh)[:2, 0]
+        z = F.pad(z, (0, 1), "constant", 1)
+        z = self.inv_affine @ z
+        z = z[:2]
         return z
 
-    @torch.no_grad()
     def angle2log(self, theta: torch.Tensor) -> torch.Tensor:
         theta = torch.as_tensor(theta)
         z = torch.tensor([torch.cos(theta), torch.sin(theta)])
         return self.log(z)
 
-    @torch.no_grad()
     def log2angle(self, z: torch.Tensor) -> torch.Tensor:
         e = self.exp(z)
         return torch.atan2(e[1], e[0])
