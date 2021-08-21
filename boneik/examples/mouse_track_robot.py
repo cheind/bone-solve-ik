@@ -25,23 +25,24 @@ def main():
             return
         loc = torch.tensor([event.xdata, event.ydata, 0]).float()
         solver.solve(anchor_dict={b3: loc}, lr=1e-0)
+        print(loc)
 
         ax = event.inaxes
         with torch.no_grad():
             fk_dict = bones.fk(solver.root, solver.dof_dict)
             for bone in bones.bfs(solver.root):
-                if bone in dof_dict:
-                    print(
-                        bone.name,
-                        dof_dict[bone].rotz.angle,
-                        dof_dict[bone].rotz.uangle,
-                    )
+                # if bone in dof_dict:
+                # print(
+                #     bone.name,
+                #     dof_dict[bone].rotz.angle,
+                #     dof_dict[bone].rotz.uangle,
+                # )
                 tb = fk_dict[bone][:2, 3].numpy()
                 if bone.parent is not None:
                     tp = fk_dict[bone.parent][:2, 3].numpy()
                     ax.plot([tp[0], tb[0]], [tp[1], tb[1]], c="green")
                 ax.scatter([tb[0]], [tb[1]], c="green")
-        fig.canvas.draw()
+        fig.canvas.draw_idle()
 
     fig.canvas.mpl_connect("motion_notify_event", on_move)
     ax.set_xlim(-5, 5)
