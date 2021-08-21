@@ -61,7 +61,7 @@ class IKSolver:
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import transformations as T
-    from .reparametrize import PI
+    from .reparametrizations import PI
 
     b0 = bones.Bone("0")
     b1 = bones.Bone("1", t=torch.Tensor(T.translation_matrix([0, 1.0, 0])))
@@ -80,9 +80,9 @@ if __name__ == "__main__":
     }
 
     anchor_dict = {
-        # b1: torch.Tensor([1.0, 1.0, 0]),
-        # b2: torch.Tensor([2.0, 0.0, 0]),
-        b2: torch.tensor([-3.6342, -3.9752, 0.0000])
+        b1: torch.Tensor([1.0, 1.0, 0]),
+        b2: torch.Tensor([2.0, 0.0, 0]),
+        # b2: torch.tensor([-3.6342, -3.9752, 0.0000])
     }
     solver.solve(anchor_dict=anchor_dict)
 

@@ -1,10 +1,9 @@
-from typing import Optional, Dict
+from typing import Dict, Optional
+
 import torch
 import torch.nn
-import transformations as T
-import torch.optim as optim
 
-from .dof import RotX, RotY, RotZ
+from .dofs import RotX, RotY, RotZ
 
 
 class BoneDOF(torch.nn.Module):

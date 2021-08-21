@@ -1,15 +1,10 @@
 from typing import Tuple
 
-import numpy as np
 import torch
-from torch.nn.parameter import Parameter
 import torch.nn.functional as F
+from torch.nn.parameter import Parameter
 
-from .reparametrize import (
-    # PeriodicAngleReparametrization,
-    # NonPeriodicAngleReparametrization,
-    ConstrainedAngleReparametrization,
-)
+from .reparametrizations import ConstrainedAngleReparametrization
 
 
 class RotDOF(torch.nn.Module):
