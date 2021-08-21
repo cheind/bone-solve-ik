@@ -34,8 +34,8 @@ class RotDOF(torch.nn.Module):
         raise NotImplementedError
 
     @torch.no_grad()
-    def normalize(self):
-        self.uangle.data[:] = F.normalize(self.uangle, dim=-1)
+    def project(self):
+        self.uangle.data.clamp_(-1.0, 1.0)
 
 
 class RotX(RotDOF):

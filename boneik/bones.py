@@ -27,10 +27,10 @@ class BoneDOF(torch.nn.Module):
     def matrix(self):
         return self.rotx.matrix() @ self.roty.matrix() @ self.rotz.matrix()
 
-    def normalize(self):
-        self.rotx.normalize()
-        self.roty.normalize()
-        self.rotz.normalize()
+    def project(self):
+        self.rotx.project()
+        self.roty.project()
+        self.rotz.project()
 
 
 class Bone:

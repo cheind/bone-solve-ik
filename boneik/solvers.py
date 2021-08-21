@@ -1,6 +1,7 @@
 from functools import partial
 import torch
 import torch.optim as optim
+from collections import defaultdict
 from . import bones
 
 
@@ -20,22 +21,22 @@ class IKSolver:
         self,
         root: bones.Bone,
         dof_dict: bones.BoneDOFDict,
-        lr: float = 1e0,
+        renormalize: bool = True,
     ) -> None:
 
         self.root = root
+        self.renormalize = renormalize
         self.dof_dict = dof_dict
         self.loss_fn = vanilla_bone_loss
-        self._init_optimizer(dof_dict, lr)
+        self._init_params(dof_dict)
 
-    def _init_optimizer(self, dof_dict: bones.BoneDOFDict, lr: float) -> None:
-        params = []
+    def _init_params(self, dof_dict: bones.BoneDOFDict) -> None:
+        self.params = []
         for dof in dof_dict.values():
-            params.extend([p for p in dof.parameters() if p.requires_grad])
-        self.opt = optim.LBFGS(params, history_size=10, max_iter=4, lr=lr)
+            self.params.extend([p for p in dof.parameters() if p.requires_grad])
 
-    def _closure(self, anchor_dict: bones.BoneTensorDict):
-        self.opt.zero_grad()
+    def _closure(self, opt: optim.LBFGS, anchor_dict: bones.BoneTensorDict):
+        opt.zero_grad()
         loss = self.loss_fn(self.root, self.dof_dict, anchor_dict)
         loss.backward()
         return loss
@@ -45,11 +46,16 @@ class IKSolver:
         anchor_dict: bones.BoneTensorDict,
         max_epochs: int = 100,
         min_rel_change: float = 1e-4,
+        lr: float = 1e0,
     ) -> float:
         last_loss, loss = 1e10, 1e10
-        closure = partial(self._closure, anchor_dict=anchor_dict)
+        opt = optim.LBFGS(self.params, history_size=10, max_iter=4, lr=lr)
+        closure = partial(self._closure, anchor_dict=anchor_dict, opt=opt)
         for e in range(max_epochs):
-            self.opt.step(closure)
+            opt.step(closure)
+            if self.renormalize:
+                for dof in self.dof_dict.values():
+                    dof.project()
             loss = self.loss_fn(self.root, self.dof_dict, anchor_dict).item()
             if loss >= last_loss or (last_loss - loss) / last_loss < min_rel_change:
                 break
