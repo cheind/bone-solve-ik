@@ -1,1 +1,4 @@
+networkx
+numpy
+transformations
 torch

@@ -1,7 +1,6 @@
 from typing import Tuple
 
 import torch
-import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 from .reparametrizations import ConstrainedAngleReparametrization
@@ -34,7 +33,7 @@ class RotDOF(torch.nn.Module):
         raise NotImplementedError
 
     @torch.no_grad()
-    def project(self):
+    def project_(self):
         self.uangle.data.clamp_(-1.0, 1.0)
 
 
