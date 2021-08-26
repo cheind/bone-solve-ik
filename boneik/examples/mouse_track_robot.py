@@ -29,7 +29,7 @@ def main():
     )
     gen.bone(1, 2, t_uv=T.translation_matrix([0, 1.0, 0]), rotz=kinematics.RotZ())
     gen.bone(2, 3, t_uv=T.translation_matrix([0, 0.5, 0]), rotz=kinematics.RotZ())
-    gen.bone(3, "end", t_uv=T.translation_matrix([0, 0.5, 0]), rotz=kinematics.RotZ())
+    gen.bone(3, "end0", t_uv=T.translation_matrix([0, 0.5, 0]), rotz=kinematics.RotZ())
     graph = gen.create_graph()
     solver = solvers.IKSolver(graph)
     fig, ax = plt.subplots()
@@ -38,7 +38,7 @@ def main():
         if not event.inaxes:
             return
         loc = torch.tensor([event.xdata, event.ydata, 0]).float()
-        solver.solve(anchor_dict={"end": loc}, lr=1.0)
+        solver.solve(anchor_dict={"end0": loc}, lr=1.0)
         ax.cla()
         draw(event.inaxes, graph)
         fig.canvas.draw_idle()
