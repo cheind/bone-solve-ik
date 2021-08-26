@@ -65,7 +65,7 @@ class ConstrainedAngleReparametrization:
     def log(self, z: torch.Tensor) -> torch.Tensor:
         z = F.pad(z, (0, 1), "constant", 1)
         z = self.inv_affine @ z
-        z = z[:2]
+        z = torch.atanh(z[:2])
         return z
 
     def angle2log(self, theta: torch.Tensor) -> torch.Tensor:
