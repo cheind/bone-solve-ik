@@ -31,11 +31,9 @@ def draw_axis(ax3d, t_world: torch.Tensor, length: float = 0.5, lw: float = 1.0)
         [[0, 0, 0, 1], [length, 0, 0, 1], [0, length, 0, 1], [0, 0, length, 1]]
     ).T
     p_0 = t_world @ p_f
-    print(p_0)
     X = torch.stack([p_0[:, 0].T, p_0[:, 1].T], 0).numpy()
     Y = torch.stack([p_0[:, 0].T, p_0[:, 2].T], 0).numpy()
     Z = torch.stack([p_0[:, 0].T, p_0[:, 3].T], 0).numpy()
-    print(X)
     ax3d.plot3D(X[:, 0], X[:, 1], X[:, 2], "r-", linewidth=lw)
     ax3d.plot3D(Y[:, 0], Y[:, 1], Y[:, 2], "g-", linewidth=lw)
     ax3d.plot3D(Z[:, 0], Z[:, 1], Z[:, 2], "b-", linewidth=lw)
@@ -61,6 +59,10 @@ def draw(
         draw_axis(ax3d, fkt[root])
         for _, v in graph.graph["bfs_edges"]:
             draw_axis(ax3d, fkt[v])
+    if draw_vertex_labels:
+        for u, label in graph.nodes.data("label"):
+            xyz = fkt[u, :3, 3].numpy()
+            ax3d.text(xyz[0], xyz[1], xyz[2], label, fontsize="x-small")
 
     if anchors is not None:
         anchors = anchors.numpy()
@@ -78,8 +80,19 @@ def main():
     g.bone("elbow.L", "hand.L", make_tuv(1.1908, "x,y,z"))
 
     g.bone("neck", "shoulder.R", make_tuv(0.71612, "z,x,y"))
-    g.bone("shoulder.R", "elbow.R", make_tuv(1.8189, "x,y,z"))
-    g.bone("elbow.R", "hand.R", make_tuv(1.1908, "x,y,z"))
+    g.bone(
+        "shoulder.R",
+        "elbow.R",
+        make_tuv(1.8189, "x,y,z"),
+        rotx=kinematics.RotX(interval=(-PI / 2, PI / 2)),
+        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+    )
+    g.bone(
+        "elbow.R",
+        "hand.R",
+        make_tuv(1.1908, "x,y,z"),
+        rotz=kinematics.RotZ(interval=(-PI, -1e-2)),
+    )
 
     g.bone("torso", "hip.R", make_tuv(1.1542, "-y,x,z"))
     g.bone("hip.R", "knee.R", make_tuv(2.2245, "x,-z,y"))
@@ -89,7 +102,14 @@ def main():
     g.bone("hip.L", "knee.L", make_tuv(2.2245, "x,-z,y"))
     g.bone("knee.L", "foot.L", make_tuv(1.7149, "x,y,z"))
 
-    g.bone("root", "torso", torch.eye(4), rotz=kinematics.RotZ())
+    g.bone(
+        "root",
+        "torso",
+        torch.eye(4),
+        rotx=kinematics.RotX(),
+        roty=kinematics.RotY(),
+        rotz=kinematics.RotZ(),
+    )
 
     graph = g.create_graph(
         [
@@ -125,7 +145,7 @@ def main():
 
     fig = plt.figure(figsize=plt.figaspect(0.5))
     ax = fig.add_subplot(1, 1, 1, projection="3d")
-    draw(ax, graph, anchors)
+    draw(ax, graph, anchors, draw_vertex_labels=True)
 
     ax.set_xlim(-5.0, 5.0)
     ax.set_xlabel("x")
