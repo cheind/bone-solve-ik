@@ -46,21 +46,27 @@ def draw(
     anchors: torch.Tensor = None,
     draw_local_frames: bool = True,
     draw_vertex_labels: bool = False,
+    hide_root: bool = True,
 ):
     fkt = kinematics.fk(graph)
     root = graph.graph["root"]
     for u, v in graph.graph["bfs_edges"]:
+        if u == root and hide_root:
+            continue
         x = fkt[[u, v], 0, 3].numpy()
         y = fkt[[u, v], 1, 3].numpy()
         z = fkt[[u, v], 2, 3].numpy()
         ax3d.plot(x, y, z, lw=1, c="k", linestyle="--")
         ax3d.scatter(x[1], y[1], z[1], c="k")
     if draw_local_frames:
-        draw_axis(ax3d, fkt[root])
+        if not hide_root:
+            draw_axis(ax3d, fkt[root])
         for _, v in graph.graph["bfs_edges"]:
             draw_axis(ax3d, fkt[v])
     if draw_vertex_labels:
         for u, label in graph.nodes.data("label"):
+            if u == root and hide_root:
+                continue
             xyz = fkt[u, :3, 3].numpy()
             ax3d.text(xyz[0], xyz[1], xyz[2], label, fontsize="x-small")
 
@@ -84,14 +90,14 @@ def main():
         "shoulder.R",
         "elbow.R",
         make_tuv(1.8189, "x,y,z"),
-        rotx=kinematics.RotX(interval=(-PI / 2, PI / 2)),
-        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+        rx=kinematics.RotX(interval=(-PI / 2, PI / 2)),
+        rz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
     )
     g.bone(
         "elbow.R",
         "hand.R",
         make_tuv(1.1908, "x,y,z"),
-        rotz=kinematics.RotZ(interval=(-PI, -1e-2)),
+        rz=kinematics.RotZ(interval=(-PI, -1e-2)),
     )
 
     g.bone("torso", "hip.R", make_tuv(1.1542, "-y,x,z"))
@@ -106,9 +112,12 @@ def main():
         "root",
         "torso",
         torch.eye(4),
-        rotx=kinematics.RotX(),
-        roty=kinematics.RotY(),
-        rotz=kinematics.RotZ(),
+        rx=kinematics.RotX(),
+        ry=kinematics.RotY(),
+        rz=kinematics.RotZ(),
+        tx=kinematics.TransX(),
+        ty=kinematics.TransY(),
+        tz=kinematics.TransZ(),
     )
 
     graph = g.create_graph(
@@ -137,7 +146,7 @@ def main():
     anchors = torch.zeros((N, 3))
     weights = torch.ones(N)
     weights[-1] = 0
-    anchors[: N - 1] = torch.from_numpy(frame_data[0]).float()
+    anchors[: N - 1] = torch.from_numpy(frame_data[10]).float()
 
     solver = solvers.IKSolver(graph)
     solver.solve(anchors, weights)
