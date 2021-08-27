@@ -25,25 +25,25 @@ def main():
         0,
         1,
         t_uv=T.translation_matrix([0, 1.5, 0]),
-        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+        rz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
     )
     gen.bone(
         1,
         2,
         t_uv=T.translation_matrix([0, 1.0, 0]),
-        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+        rz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
     )
     gen.bone(
         2,
         3,
         t_uv=T.translation_matrix([0, 0.5, 0]),
-        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+        rz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
     )
     gen.bone(
         3,
         4,
         t_uv=T.translation_matrix([0, 0.5, 0]),
-        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+        rz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
     )
     graph = gen.create_graph()
     N = graph.number_of_nodes()
@@ -59,7 +59,10 @@ def main():
         loc = torch.tensor([event.xdata, event.ydata, 0]).float()
         anchors[-1] = loc
         weights[-1] = 1.0
-        solver.solve(anchors, weights, lr=1e-1)
+        loss = solver.solve(anchors, weights, lr=1e-1)
+        if loss > 1.0:
+            kinematics.reset_dofs(graph)
+            solver.solve(anchors, weights, lr=1e-1)
         ax.cla()
         draw(event.inaxes, graph)
         fig.canvas.draw_idle()
