@@ -88,12 +88,12 @@ if __name__ == "__main__":
         "root",
         "j1",
         t_uv=T.translation_matrix([0, 1.0, 0]),
-        rotz=kinematics.RotZ(interval=(-PI / 8, PI / 8)),
+        rz=kinematics.RotZ(interval=(-PI / 8, PI / 8)),
     ).bone(
         "j1",
         "j2",
         t_uv=T.translation_matrix([0, 1.0, 0]),
-        rotz=kinematics.RotZ(interval=(-PI / 4, -PI / 8)),
+        rz=kinematics.RotZ(interval=(-PI / 4, -PI / 8)),
     )
 
     graph = gen.create_graph(relabel_order=["root", "j1", "j2"])
