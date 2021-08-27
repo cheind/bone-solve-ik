@@ -1,12 +1,9 @@
 from functools import partial
-from typing import Tuple
-from networkx.relabel import relabel_nodes
+
 import torch
 import torch.optim as optim
 
 from . import kinematics
-
-LocationAnchors = Tuple[torch.FloatTensor, torch.FloatTensor]
 
 
 def vanilla_bone_loss(
