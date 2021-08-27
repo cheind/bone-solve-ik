@@ -5,7 +5,7 @@ from torch._C import Value
 import torch.nn
 import networkx as nx
 
-from .dofs import RotX, RotY, RotZ
+from .dofs import RotX, RotY, RotZ, TransX, TransY, TransZ
 
 
 class Bone(torch.nn.Module):
@@ -14,37 +14,71 @@ class Bone(torch.nn.Module):
     def __init__(
         self,
         t_uv: torch.tensor = None,
-        rotx: Optional[RotX] = None,
-        roty: Optional[RotY] = None,
-        rotz: Optional[RotZ] = None,
+        rx: Optional[RotX] = None,
+        ry: Optional[RotY] = None,
+        rz: Optional[RotZ] = None,
+        tx: Optional[TransX] = None,
+        ty: Optional[TransY] = None,
+        tz: Optional[TransZ] = None,
     ) -> None:
         super().__init__()
         if t_uv is None:
             t_uv = torch.eye(4)
-        if rotx is None:
-            rotx = RotX(unlocked=False)
-        if roty is None:
-            roty = RotY(unlocked=False)
-        if rotz is None:
-            rotz = RotZ(unlocked=False)
+        if rx is None:
+            rx = RotX(unlocked=False)
+        if ry is None:
+            ry = RotY(unlocked=False)
+        if rz is None:
+            rz = RotZ(unlocked=False)
+        if tx is None:
+            tx = TransX(unlocked=False)
+        if ty is None:
+            ty = TransY(unlocked=False)
+        if tz is None:
+            tz = TransZ(unlocked=False)
+        self.rx = rx
+        self.ry = ry
+        self.rz = rz
+        self.tx = tx
+        self.ty = ty
+        self.tz = tz
         self.t_uv = torch.as_tensor(t_uv).float()
-        self.rotx = rotx
-        self.roty = roty
-        self.rotz = rotz
 
     def matrix(self) -> torch.Tensor:
         # This should be interpreted as follows: the transformation from v to u is
         # given by first transforming wrt node u, using the rest-transformation, and
         # then applying a sequence of rotations around node u.
-        return self.rotx.matrix() @ self.roty.matrix() @ self.rotz.matrix() @ self.t_uv
+        return (
+            self.tx.matrix()
+            @ self.ty.matrix()
+            @ self.tz.matrix()
+            @ self.rx.matrix()
+            @ self.ry.matrix()
+            @ self.rz.matrix()
+            @ self.t_uv
+        )
 
     def project_(self):
-        self.rotx.project_()
-        self.roty.project_()
-        self.rotz.project_()
+        self.rx.project_()
+        self.ry.project_()
+        self.rz.project_()
+
+    def reset_(self):
+        self.rx.reset_()
+        self.ry.reset_()
+        self.rz.reset_()
+        self.tx.reset_()
+        self.ty.reset_()
+        self.tz.reset_()
 
     def __str__(self):
-        return f"Bone(rotx={self.rotx.angle:.3f},roty={self.roty.angle:.3f},rotz={self.rotz.angle:.3f})"
+        return (
+            "Bone(r=["
+            f"{self.rx.angle.item():.3f},{self.ry.angle.item():.3f},{self.rz.angle.item():.3f}"
+            "], t=["
+            f"{self.tx.offset.item():.3f},{self.ty.offset.item():.3f},{self.tz.offset.item():.3f}"
+            "])"
+        )
 
 
 Vertex = Any
@@ -64,11 +98,14 @@ class SkeletonGenerator:
         u: Vertex,
         v: Vertex,
         t_uv: torch.tensor = None,
-        rotx: Optional[RotX] = None,
-        roty: Optional[RotY] = None,
-        rotz: Optional[RotZ] = None,
+        rx: Optional[RotX] = None,
+        ry: Optional[RotY] = None,
+        rz: Optional[RotZ] = None,
+        tx: Optional[TransX] = None,
+        ty: Optional[TransY] = None,
+        tz: Optional[TransZ] = None,
     ) -> "SkeletonGenerator":
-        self.graph.add_edge(u, v, bone=Bone(t_uv, rotx, roty, rotz))
+        self.graph.add_edge(u, v, bone=Bone(t_uv, rx, ry, rz, tx, ty, tz))
         return self
 
     def create_graph(self, relabel_order: List[Vertex] = None) -> SkeletonGraph:
@@ -97,6 +134,12 @@ def fk(graph: SkeletonGraph) -> torch.FloatTensor:
         bone: Bone = graph[u][v]["bone"]
         fkt[v] = fkt[u] @ bone.matrix()
     return torch.stack(fkt, 0)
+
+
+def reset_dofs(graph: SkeletonGraph):
+    for u, v in graph.graph["bfs_edges"]:
+        bone: Bone = graph[u][v]["bone"]
+        bone.reset_()
 
 
 def fmt_skeleton(graph: SkeletonGraph):
