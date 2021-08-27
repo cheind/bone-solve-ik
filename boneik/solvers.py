@@ -1,20 +1,24 @@
 from functools import partial
-
+from typing import Tuple
+from networkx.relabel import relabel_nodes
 import torch
 import torch.optim as optim
 
 from . import kinematics
 
+LocationAnchors = Tuple[torch.FloatTensor, torch.FloatTensor]
+
 
 def vanilla_bone_loss(
     graph: kinematics.SkeletonGraph,
-    anchor_dict: kinematics.VertexTensorDict,
+    anchors: torch.FloatTensor,
+    weights: torch.FloatTensor,
 ):
-    loss = 0.0
-    fk_dict = kinematics.fk(graph)
-    for vertex, loc in anchor_dict.items():
-        lss = ((loc - fk_dict[vertex][:3, 3]) ** 2).sum()
-        loss += lss
+    fkt = kinematics.fk(graph)
+    loss = (
+        torch.square(anchors - fkt[:, :3, 3]).sum(-1) * weights
+    ).sum() / weights.sum()
+
     return loss
 
 
@@ -22,11 +26,11 @@ class IKSolver:
     def __init__(
         self,
         graph: kinematics.SkeletonGraph,
-        reproject: bool = True,
+        normalize: bool = True,
     ) -> None:
 
         self.graph = graph
-        self.reproject = reproject
+        self.normalize = normalize
         self.loss_fn = vanilla_bone_loss
         self._init_params()
 
@@ -36,16 +40,19 @@ class IKSolver:
             ps = [p for p in bone.parameters() if p.requires_grad]
             self.params.extend(ps)
 
-    def _closure(self, opt: optim.LBFGS, anchor_dict: kinematics.VertexTensorDict):
+    def _closure(
+        self, opt: optim.LBFGS, anchors: torch.FloatTensor, weights: torch.FloatTensor
+    ):
         opt.zero_grad()
-        loss = self.loss_fn(self.graph, anchor_dict)
+        loss = self.loss_fn(self.graph, anchors, weights)
         loss.backward()
         return loss
 
     def solve(
         self,
-        anchor_dict: kinematics.VertexTensorDict,
-        max_epochs: int = 10,
+        anchors: torch.FloatTensor,
+        weights: torch.FloatTensor,
+        max_epochs: int = 100,
         min_abs_change: float = 1e-5,
         lr: float = 1e0,
     ) -> float:
@@ -53,19 +60,19 @@ class IKSolver:
         opt = optim.LBFGS(
             self.params, history_size=100, lr=lr, line_search_fn="strong_wolfe"
         )
-        closure = partial(self._closure, anchor_dict=anchor_dict, opt=opt)
+        closure = partial(self._closure, opt=opt, anchors=anchors, weights=weights)
         for e in range(max_epochs):
             opt.step(closure)
-            loss = self.loss_fn(self.graph, anchor_dict).item()
+            loss = self.loss_fn(self.graph, anchors, weights).item()
             if (last_loss - loss) < min_abs_change:
                 break
             last_loss = loss
-            self._reproject()
+            self._normalize()
         print(f"Completed after {e+1} epochs, loss {loss}")
         return loss
 
-    def _reproject(self):
-        if self.reproject:
+    def _normalize(self):
+        if self.normalize:
             for _, _, bone in self.graph.edges(data="bone"):
                 bone: kinematics.Bone
                 bone.project_()
@@ -77,39 +84,46 @@ if __name__ == "__main__":
 
     from .reparametrizations import PI
 
+    torch.autograd.set_detect_anomaly(True)
+
     gen = kinematics.SkeletonGenerator()
     gen.bone(
-        0,
-        1,
+        "root",
+        "j1",
         t_uv=T.translation_matrix([0, 1.0, 0]),
         rotz=kinematics.RotZ(interval=(-PI / 8, PI / 8)),
     ).bone(
-        1,
-        "end",
+        "j1",
+        "j2",
         t_uv=T.translation_matrix([0, 1.0, 0]),
-        rotz=kinematics.RotZ(interval=(-(2 * PI) / 4, -PI / 4)),
+        rotz=kinematics.RotZ(interval=(-PI / 4, -PI / 8)),
     )
 
-    graph = gen.create_graph()
+    graph = gen.create_graph(relabel_order=["root", "j1", "j2"])
     solver = IKSolver(graph)
 
-    anchor_dict = {
-        1: torch.Tensor([1.0, 1.0, 0]),
-        "end": torch.Tensor([2.0, 0.0, 0]),
-    }
-    solver.solve(anchor_dict=anchor_dict, lr=1.0)
+    anchors = torch.zeros(3, 3)
+    weights = torch.zeros(3)
+
+    anchors[1] = torch.Tensor([1.0, 1.0, 0])
+    weights[1] = 1.0
+
+    anchors[2] = torch.Tensor([2.0, 0.0, 0])
+    weights[2] = 1.0
+    solver.solve(anchors, weights, lr=1e-1)
     print(kinematics.fmt_skeleton(graph))
 
     # Plot anchors
     fig, ax = plt.subplots()
-    for n, loc in anchor_dict.items():
-        ax.scatter([loc[0].item()], [loc[1].item()], c="k", marker="+")
+    for a, w in zip(anchors, weights):
+        if w > 0:
+            ax.scatter([a[0].item()], [a[1].item()], c="k", marker="+")
 
     with torch.no_grad():
-        fk_dict = kinematics.fk(graph)
+        fkt = kinematics.fk(graph)
         for u, v in graph.graph["bfs_edges"]:
-            tu = fk_dict[u][:2, 3].numpy()
-            tv = fk_dict[v][:2, 3].numpy()
+            tu = fkt[u, :2, 3].numpy()
+            tv = fkt[v, :2, 3].numpy()
             ax.plot([tu[0], tv[0]], [tu[1], tv[1]], c="green")
             ax.scatter([tu[0], tv[0]], [tu[1], tv[1]], c="green")
 

@@ -1,6 +1,7 @@
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, Optional, Tuple, Any, List
 
 import torch
+from torch._C import Value
 import torch.nn
 import networkx as nx
 
@@ -70,21 +71,32 @@ class SkeletonGenerator:
         self.graph.add_edge(u, v, bone=Bone(t_uv, rotx, roty, rotz))
         return self
 
-    def create_graph(self) -> SkeletonGraph:
-        root = [n for n, d in self.graph.in_degree() if d == 0][0]
-        self.graph.graph["bfs_edges"] = list(nx.bfs_edges(self.graph, root))
-        self.graph.graph["root"] = root
-        return self.graph
+    def create_graph(self, relabel_order: List[Vertex] = None) -> SkeletonGraph:
+        """Returns the final skeleton graph with nodes relabled in range [0,N)."""
+        N = self.graph.number_of_nodes()
+        if relabel_order is None:
+            relabel_order = list(self.graph.nodes())
+        node_mapping = dict(zip(relabel_order, range(N)))
+        graph = nx.relabel_nodes(self.graph, node_mapping, copy=False)
+        nx.set_node_attributes(graph, {v: k for k, v in node_mapping.items()}, "label")
+        roots = [n for n, d in graph.in_degree() if d == 0]
+        if len(roots) > 1:
+            raise ValueError("More than one skeleton root.")
+        graph.graph["bfs_edges"] = list(nx.bfs_edges(graph, roots[0]))
+        graph.graph["root"] = roots[0]
+        return graph
 
 
-def fk(graph: SkeletonGraph) -> VertexTensorDict:
+def fk(graph: SkeletonGraph) -> torch.FloatTensor:
     """Computes the forward kinematic poses of each vertex."""
-    fk_dict = {}
-    fk_dict[graph.graph["root"]] = torch.eye(4)
+    N = graph.number_of_nodes()
+    root = graph.graph["root"]
+    fkt = [torch.zeros((4, 4)) for _ in range(N)]
+    fkt[root] = torch.eye(4)
     for u, v in graph.graph["bfs_edges"]:
         bone: Bone = graph[u][v]["bone"]
-        fk_dict[v] = fk_dict[u] @ bone.matrix()
-    return fk_dict
+        fkt[v] = fkt[u] @ bone.matrix()
+    return torch.stack(fkt, 0)
 
 
 def fmt_skeleton(graph: SkeletonGraph):
@@ -95,5 +107,7 @@ def fmt_skeleton(graph: SkeletonGraph):
     fmt_str = f"{{u:>{max_node_width}s}} -> {{v:{max_node_width}s}} : {{bone}}"
     for u, v in graph.graph["bfs_edges"]:
         bone: Bone = graph[u][v]["bone"]
-        parts.append(fmt_str.format(u=str(u), v=str(v), bone=bone))
+        ulabel = graph.nodes[u]["label"]
+        vlabel = graph.nodes[v]["label"]
+        parts.append(fmt_str.format(u=str(ulabel), v=str(vlabel), bone=bone))
     return "\n".join(parts)

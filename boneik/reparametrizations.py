@@ -1,10 +1,15 @@
 from typing import Tuple, Optional
+import warnings
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 PI = np.pi
 PI2 = 2 * PI
+
+
+class BoundsViolatedWarning(UserWarning):
+    pass
 
 
 class ConstrainedAngleReparametrization:
@@ -19,17 +24,17 @@ class ConstrainedAngleReparametrization:
             = norm(affine(tanh(x,y))
     """
 
-    def __init__(self, interval: Optional[Tuple[float, float]] = None) -> None:
-        if interval is None:
+    def __init__(self, open_interval: Optional[Tuple[float, float]] = None) -> None:
+        if open_interval is None:
             self.i = (-PI, PI)
             self.length = 2 * PI
             self.is_constrained = False
         else:
-            self.i = interval
+            self.i = open_interval
             self.length = self.i[1] - self.i[0]
             self.is_constrained = True
         assert (
-            interval is None or self.length <= PI
+            open_interval is None or self.length <= PI
         ), "Constrained interval must be <= PI."
         self._init_affine()
 
@@ -69,6 +74,12 @@ class ConstrainedAngleReparametrization:
         return z
 
     def angle2log(self, theta: torch.Tensor) -> torch.Tensor:
+        if self.is_constrained and (theta <= self.i[0] or theta >= self.i[1]):
+            theta = (self.i[0] + self.i[1]) * 0.5
+            warnings.warn(
+                f"Angle out of bounds, changing to midpoint {theta:.3f}",
+                BoundsViolatedWarning,
+            )
         theta = torch.as_tensor(theta)
         z = torch.tensor([torch.cos(theta), torch.sin(theta)])
         return self.log(z)
@@ -76,3 +87,10 @@ class ConstrainedAngleReparametrization:
     def log2angle(self, z: torch.Tensor) -> torch.Tensor:
         e = self.exp(z)
         return torch.atan2(e[1], e[0])
+
+    def project_inplace(self, z: torch.Tensor):
+        z.data.clamp_(
+            -2.0, 2.0
+        )  # Actually never allows uangle to be in arange for which tanh(z) = +/- 1
+        # avoiding vanishing gradients. Also means, that interval is open-range on
+        # both sides.

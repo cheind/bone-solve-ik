@@ -6,7 +6,7 @@ from torch.nn.parameter import Parameter
 from .reparametrizations import ConstrainedAngleReparametrization
 
 
-class RotDOF(torch.nn.Module):
+class BaseRotDOF(torch.nn.Module):
     def __init__(
         self,
         *,
@@ -22,22 +22,15 @@ class RotDOF(torch.nn.Module):
     def angle(self):
         return self.reparam.log2angle(self.uangle)
 
-    def unlock(self, interval: Tuple[float, float] = None):
-        if interval is not None:
-            angle = self.angle
-            self.reparam = ConstrainedAngleReparametrization(interval)
-            self.uangle.data[:] = self.reparam.angle2log(angle)
-        self.uangle.requires_grad_(True)
-
     def matrix(self) -> torch.Tensor:
         raise NotImplementedError
 
     @torch.no_grad()
     def project_(self):
-        self.uangle.data.clamp_(-1.0, 1.0)
+        self.reparam.project_inplace(self.uangle)
 
 
-class RotX(RotDOF):
+class RotX(BaseRotDOF):
     def matrix(self) -> torch.Tensor:
         c, s = self.reparam.exp(self.uangle)
         m = torch.eye(4)
@@ -48,7 +41,7 @@ class RotX(RotDOF):
         return m
 
 
-class RotY(RotDOF):
+class RotY(BaseRotDOF):
     def matrix(self) -> torch.Tensor:
         c, s = self.reparam.exp(self.uangle)
         m = torch.eye(4)
@@ -59,7 +52,7 @@ class RotY(RotDOF):
         return m
 
 
-class RotZ(RotDOF):
+class RotZ(BaseRotDOF):
     def matrix(self) -> torch.Tensor:
         c, s = self.reparam.exp(self.uangle)
         m = torch.eye(4)

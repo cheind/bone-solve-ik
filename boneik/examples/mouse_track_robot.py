@@ -27,18 +27,39 @@ def main():
         t_uv=T.translation_matrix([0, 1.5, 0]),
         rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
     )
-    gen.bone(1, 2, t_uv=T.translation_matrix([0, 1.0, 0]), rotz=kinematics.RotZ())
-    gen.bone(2, 3, t_uv=T.translation_matrix([0, 0.5, 0]), rotz=kinematics.RotZ())
-    gen.bone(3, "end0", t_uv=T.translation_matrix([0, 0.5, 0]), rotz=kinematics.RotZ())
+    gen.bone(
+        1,
+        2,
+        t_uv=T.translation_matrix([0, 1.0, 0]),
+        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+    )
+    gen.bone(
+        2,
+        3,
+        t_uv=T.translation_matrix([0, 0.5, 0]),
+        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+    )
+    gen.bone(
+        3,
+        4,
+        t_uv=T.translation_matrix([0, 0.5, 0]),
+        rotz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
+    )
     graph = gen.create_graph()
+    N = graph.number_of_nodes()
     solver = solvers.IKSolver(graph)
     fig, ax = plt.subplots()
+
+    anchors = torch.zeros(N, 3)
+    weights = torch.zeros(N)
 
     def on_move(event):
         if not event.inaxes:
             return
         loc = torch.tensor([event.xdata, event.ydata, 0]).float()
-        solver.solve(anchor_dict={"end0": loc}, lr=1.0)
+        anchors[-1] = loc
+        weights[-1] = 1.0
+        solver.solve(anchors, weights, lr=1e-1)
         ax.cla()
         draw(event.inaxes, graph)
         fig.canvas.draw_idle()
