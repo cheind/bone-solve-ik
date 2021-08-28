@@ -80,7 +80,7 @@ class ConstrainedAngleReparametrization:
                 f"Angle out of bounds, changing to midpoint {theta:.3f}",
                 BoundsViolatedWarning,
             )
-        theta = torch.as_tensor(theta)
+        theta = torch.as_tensor(theta).float()
         z = torch.tensor([torch.cos(theta), torch.sin(theta)])
         return self.log(z)
 

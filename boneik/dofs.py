@@ -16,7 +16,9 @@ class BaseRotDOF(torch.nn.Module):
     ):
         super().__init__()
         self.reparam = ConstrainedAngleReparametrization(interval)
-        self.uangle = Parameter(self.reparam.angle2log(angle), requires_grad=unlocked)
+        self.uangle = Parameter(
+            self.reparam.angle2log(angle).float(), requires_grad=unlocked
+        )
         self._reset_value = self.uangle.data.clone()
 
     @property
@@ -76,7 +78,7 @@ class BaseTransDOF(torch.nn.Module):
         unlocked: bool = True,
     ):
         super().__init__()
-        self.offset = Parameter(torch.tensor(offset), requires_grad=unlocked)
+        self.offset = Parameter(torch.tensor(offset).float(), requires_grad=unlocked)
         self._reset_value = self.offset.data.clone()
 
     def matrix(self) -> torch.Tensor:

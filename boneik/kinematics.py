@@ -97,7 +97,7 @@ class SkeletonGenerator:
         self,
         u: Vertex,
         v: Vertex,
-        t_uv: torch.tensor = None,
+        t_uv: torch.Tensor = None,
         rx: Optional[RotX] = None,
         ry: Optional[RotY] = None,
         rz: Optional[RotZ] = None,

@@ -1,6 +1,8 @@
+from boneik.dofs import RotX
 from boneik.reparametrizations import PI
 import matplotlib.pyplot as plt
 import transformations as T
+import numpy as np
 import torch
 import pickle
 
@@ -24,6 +26,49 @@ def make_tuv(length: float, axis_in_parent: str):
     t = torch.eye(4)
     t[:3, 3] = torch.tensor([0, length, 0])
     return r @ t  # note, reversed to have translation around local frame.
+
+
+def make_dofs(**kwargs):
+    a = kwargs.get("rx", None)
+    i = kwargs.get("rxi", None)
+    rx = None
+    if a is not None:
+        if i is not None:
+            i = tuple([np.deg2rad(a) for a in i])
+        rx = kinematics.RotX(angle=np.deg2rad(a), interval=i)
+
+    a = kwargs.get("ry", None)
+    i = kwargs.get("ryi", None)
+    ry = None
+    if a is not None:
+        if i is not None:
+            i = tuple([np.deg2rad(a) for a in i])
+        ry = kinematics.RotY(angle=np.deg2rad(a), interval=i)
+
+    a = kwargs.get("rz", None)
+    i = kwargs.get("rzi", None)
+    rz = None
+    if a is not None:
+        if i is not None:
+            i = tuple([np.deg2rad(a) for a in i])
+        rz = kinematics.RotZ(angle=np.deg2rad(a), interval=i)
+
+    o = kwargs.get("tx", None)
+    tx = None
+    if o is not None:
+        tx = kinematics.TransX(offset=o)
+
+    o = kwargs.get("ty", None)
+    ty = None
+    if o is not None:
+        ty = kinematics.TransY(offset=o)
+
+    o = kwargs.get("tz", None)
+    tz = None
+    if o is not None:
+        tz = kinematics.TransZ(offset=o)
+
+    return dict(rx=rx, ry=ry, rz=rz, tx=tx, ty=ty, tz=tz)
 
 
 def draw_axis(ax3d, t_world: torch.Tensor, length: float = 0.5, lw: float = 1.0):
@@ -86,19 +131,8 @@ def main():
     g.bone("elbow.L", "hand.L", make_tuv(1.1908, "x,y,z"))
 
     g.bone("neck", "shoulder.R", make_tuv(0.71612, "z,x,y"))
-    g.bone(
-        "shoulder.R",
-        "elbow.R",
-        make_tuv(1.8189, "x,y,z"),
-        rx=kinematics.RotX(interval=(-PI / 2, PI / 2)),
-        rz=kinematics.RotZ(interval=(-PI / 2, PI / 2)),
-    )
-    g.bone(
-        "elbow.R",
-        "hand.R",
-        make_tuv(1.1908, "x,y,z"),
-        rz=kinematics.RotZ(interval=(-PI, -1e-2)),
-    )
+    g.bone("shoulder.R", "elbow.R", make_tuv(1.8189, "x,y,z"))
+    g.bone("elbow.R", "hand.R", make_tuv(1.1908, "x,y,z"))
 
     g.bone("torso", "hip.R", make_tuv(1.1542, "-y,x,z"))
     g.bone("hip.R", "knee.R", make_tuv(2.2245, "x,-z,y"))
@@ -109,15 +143,7 @@ def main():
     g.bone("knee.L", "foot.L", make_tuv(1.7149, "x,y,z"))
 
     g.bone(
-        "root",
-        "torso",
-        torch.eye(4),
-        rx=kinematics.RotX(),
-        ry=kinematics.RotY(),
-        rz=kinematics.RotZ(),
-        tx=kinematics.TransX(),
-        ty=kinematics.TransY(),
-        tz=kinematics.TransZ(),
+        "root", "torso", torch.eye(4), **make_dofs(rx=0, ry=0, rz=0, tx=0, ty=0, tz=0)
     )
 
     graph = g.create_graph(
@@ -149,11 +175,14 @@ def main():
     anchors[: N - 1] = torch.from_numpy(frame_data[10]).float()
 
     solver = solvers.IKSolver(graph)
-    solver.solve(anchors, weights)
+    # solver.solve(anchors, weights)
     print(kinematics.fmt_skeleton(graph))
 
     fig = plt.figure(figsize=plt.figaspect(0.5))
     ax = fig.add_subplot(1, 1, 1, projection="3d")
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
     draw(ax, graph, anchors, draw_vertex_labels=True)
 
     ax.set_xlim(-5.0, 5.0)
@@ -166,11 +195,6 @@ def main():
 
     print(kinematics.fk(graph))
 
-
-# "head", 'neck', 'shoulder.R', 'elbow.R', 'hand.R', # 0-4
-# 'shoulder.L', 'elbow.L', 'hand.L', # 5-7
-# 'hip.R', 'knee.R', 'foot.R', 'hip.L', 'knee.L', 'foot.L', # 8-13
-# 'hip', 'chest']
 
 if __name__ == "__main__":
     main()
