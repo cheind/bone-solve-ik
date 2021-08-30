@@ -130,13 +130,13 @@ def main():
         "torso",
         "chest",
         make_tuv(1.17965, "-x,z,y"),
-        **make_dofs(rx=0.0, irx=(-10.0, 90.0))
+        **make_dofs(rx=0.0, irx=(-10.0, 90.0)),
     )
     g.bone(
         "chest",
         "neck",
         make_tuv(2.0279, "x,y,z"),
-        **make_dofs(ry=0.0, iry=(-90.0, 90.0))
+        **make_dofs(ry=0.0, iry=(-90.0, 90.0)),
     )
     g.bone("neck", "head", make_tuv(0.73577, "-x,y,-z"))
 
@@ -156,13 +156,13 @@ def main():
             iry=(-90.0, 90.0),
             rz=0.0,
             irz=(-90.0, 90.0),
-        )
+        ),
     )
     g.bone(
         "elbow.L",
         "hand.L",
         make_tuv(1.1908, "x,y,z"),
-        **make_dofs(rz=0.0, irz=(-135.0, 0.0))
+        **make_dofs(rz=0.0, irz=(-135.0, 0.0)),
     )
 
     g.bone("neck", "shoulder.R", make_tuv(0.71612, "z,x,y"))
@@ -177,13 +177,13 @@ def main():
             irz=(-90.0, 90.0),
             ry=0.0,
             iry=(-90.0, 90.0),
-        )
+        ),
     )
     g.bone(
         "elbow.R",
         "hand.R",
         make_tuv(1.1908, "x,y,z"),
-        **make_dofs(rz=0.0, irz=(0.0, 135.0))
+        **make_dofs(rz=0.0, irz=(0.0, 135.0)),
     )
 
     g.bone("torso", "hip.L", make_tuv(1.1542, "-y,x,z"))
@@ -193,13 +193,13 @@ def main():
         make_tuv(2.2245, "x,-z,y"),
         **make_dofs(
             rz=0.0, irz=(-90.0, 90), rx=0.0, irx=(-20.0, 20), ry=0.0, iry=(-10.0, 10.0)
-        )
+        ),
     )
     g.bone(
         "knee.L",
         "foot.L",
         make_tuv(1.7149, "x,y,z"),
-        **make_dofs(rz=0, irz=(0.0, 90.0))
+        **make_dofs(rz=0, irz=(0.0, 90.0)),
     )
 
     g.bone("torso", "hip.R", make_tuv(1.1542, "y,-x,z"))
@@ -209,13 +209,13 @@ def main():
         make_tuv(2.2245, "x,-z,y"),
         **make_dofs(
             rz=0.0, irz=(-90.0, 90), rx=0.0, irx=(-20.0, 20), ry=0.0, iry=(-10.0, 10.0)
-        )
+        ),
     )
     g.bone(
         "knee.R",
         "foot.R",
         make_tuv(1.7149, "x,y,z"),
-        **make_dofs(rz=0, irz=(-90.0, 0.0))
+        **make_dofs(rz=0, irz=(-90.0, 0.0)),
     )
 
     g.bone(
@@ -264,13 +264,14 @@ def main():
         solver.solve(anchors, weights)
         print(kinematics.fmt_skeleton(graph))
         ax.cla()
-        draw(ax, graph, anchors, draw_vertex_labels=True)
+        draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
         ax.set_xlim(-5.0, 5.0)
         ax.set_xlabel("x")
         ax.set_ylim(-5.0, 5.0)
         ax.set_ylabel("y")
         ax.set_zlim(-5.0, 5.0)
         ax.set_zlabel("z")
+        fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
         plt.show(block=False)
         plt.pause(0.01)
         # plt.show()
@@ -278,5 +279,16 @@ def main():
     print(kinematics.fk(graph))
 
 
+def makefile():
+    # ffmpeg -f concat -i tmp\concat.txt -vf "crop=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -pix_fmt yuv420p skel.mp4
+    from glob import glob
+    from pathlib import Path
+
+    files = sorted(glob("tmp/*.png"))
+    with open("tmp/concat.txt", "w") as f:
+        f.writelines([f"file {Path(f).name}\nduration 0.25\n" for f in files])
+
+
 if __name__ == "__main__":
     main()
+    # makefile()
