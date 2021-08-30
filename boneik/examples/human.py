@@ -118,29 +118,105 @@ def draw(
     if anchors is not None:
         anchors = anchors.numpy()
         ax3d.scatter(anchors[:, 0], anchors[:, 1], anchors[:, 2], c="r", marker="o")
+        # for u, label in graph.nodes.data("label"):
+        #     ax3d.text(
+        #         anchors[u, 0], anchors[u, 1], anchors[u, 2], label, fontsize="x-small"
+        #     )
 
 
 def main():
     g = kinematics.SkeletonGenerator()
-    g.bone("torso", "chest", make_tuv(1.17965, "-x,z,y"))
-    g.bone("chest", "neck", make_tuv(2.0279, "x,y,z"))
-    g.bone("neck", "head", make_tuv(0.73577, "x,y,z"))
+    g.bone(
+        "torso",
+        "chest",
+        make_tuv(1.17965, "-x,z,y"),
+        **make_dofs(rx=0.0, irx=(-10.0, 90.0))
+    )
+    g.bone(
+        "chest",
+        "neck",
+        make_tuv(2.0279, "x,y,z"),
+        **make_dofs(ry=0.0, iry=(-90.0, 90.0))
+    )
+    g.bone("neck", "head", make_tuv(0.73577, "-x,y,-z"))
 
-    g.bone("neck", "shoulder.L", make_tuv(0.71612, "-z,-x,y"))
-    g.bone("shoulder.L", "elbow.L", make_tuv(1.8189, "x,y,z"))
-    g.bone("elbow.L", "hand.L", make_tuv(1.1908, "x,y,z"))
+    g.bone(
+        "neck",
+        "shoulder.L",
+        make_tuv(0.71612, "-z,-x,y"),
+    )
+    g.bone(
+        "shoulder.L",
+        "elbow.L",
+        make_tuv(1.8189, "x,y,z"),
+        **make_dofs(
+            rx=0.0,
+            irx=(-90.0, 90.0),
+            ry=0.0,
+            iry=(-90.0, 90.0),
+            rz=0.0,
+            irz=(-90.0, 90.0),
+        )
+    )
+    g.bone(
+        "elbow.L",
+        "hand.L",
+        make_tuv(1.1908, "x,y,z"),
+        **make_dofs(rz=0.0, irz=(-135.0, 0.0))
+    )
 
     g.bone("neck", "shoulder.R", make_tuv(0.71612, "z,x,y"))
-    g.bone("shoulder.R", "elbow.R", make_tuv(1.8189, "x,y,z"))
-    g.bone("elbow.R", "hand.R", make_tuv(1.1908, "x,y,z"))
+    g.bone(
+        "shoulder.R",
+        "elbow.R",
+        make_tuv(1.8189, "x,y,z"),
+        **make_dofs(
+            rx=0.0,
+            irx=(-90.0, 90.0),
+            rz=0.0,
+            irz=(-90.0, 90.0),
+            ry=0.0,
+            iry=(-90.0, 90.0),
+        )
+    )
+    g.bone(
+        "elbow.R",
+        "hand.R",
+        make_tuv(1.1908, "x,y,z"),
+        **make_dofs(rz=0.0, irz=(0.0, 135.0))
+    )
 
-    g.bone("torso", "hip.R", make_tuv(1.1542, "-y,x,z"))
-    g.bone("hip.R", "knee.R", make_tuv(2.2245, "x,-z,y"))
-    g.bone("knee.R", "foot.R", make_tuv(1.7149, "x,y,z"))
+    g.bone("torso", "hip.L", make_tuv(1.1542, "-y,x,z"))
+    g.bone(
+        "hip.L",
+        "knee.L",
+        make_tuv(2.2245, "x,-z,y"),
+        **make_dofs(
+            rz=0.0, irz=(-90.0, 90), rx=0.0, irx=(-20.0, 20), ry=0.0, iry=(-10.0, 10.0)
+        )
+    )
+    g.bone(
+        "knee.L",
+        "foot.L",
+        make_tuv(1.7149, "x,y,z"),
+        **make_dofs(rz=0, irz=(0.0, 90.0))
+    )
 
-    g.bone("torso", "hip.L", make_tuv(1.1542, "y,-x,z"))
-    g.bone("hip.L", "knee.L", make_tuv(2.2245, "x,-z,y"))
-    g.bone("knee.L", "foot.L", make_tuv(1.7149, "x,y,z"))
+    g.bone("torso", "hip.R", make_tuv(1.1542, "y,-x,z"))
+    g.bone(
+        "hip.R",
+        "knee.R",
+        make_tuv(2.2245, "x,-z,y"),
+        **make_dofs(
+            rz=0.0, irz=(-90.0, 90), rx=0.0, irx=(-20.0, 20), ry=0.0, iry=(-10.0, 10.0)
+        )
+    )
+    g.bone(
+        "knee.R",
+        "foot.R",
+        make_tuv(1.7149, "x,y,z"),
+        **make_dofs(rz=0, irz=(-90.0, 0.0))
+    )
 
     g.bone(
         "root", "torso", torch.eye(4), **make_dofs(rx=0, ry=0, rz=0, tx=0, ty=0, tz=0)
@@ -169,29 +245,35 @@ def main():
     )
     N = graph.number_of_nodes()
     frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
-    anchors = torch.zeros((N, 3))
-    weights = torch.ones(N)
-    weights[-1] = 0
-    anchors[: N - 1] = torch.from_numpy(frame_data[10]).float()
 
     solver = solvers.IKSolver(graph)
-    # solver.solve(anchors, weights)
-    print(kinematics.fmt_skeleton(graph))
 
     fig = plt.figure(figsize=plt.figaspect(0.5))
     ax = fig.add_subplot(1, 1, 1, projection="3d")
     ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
     ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
     ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    draw(ax, graph, anchors, draw_vertex_labels=True)
 
-    ax.set_xlim(-5.0, 5.0)
-    ax.set_xlabel("x")
-    ax.set_ylim(-5.0, 5.0)
-    ax.set_ylabel("y")
-    ax.set_zlim(-5.0, 5.0)
-    ax.set_zlabel("z")
-    plt.show()
+    anchors = torch.zeros((N, 3))
+    weights = torch.ones(N)
+    weights[-1] = 0
+
+    for i in range(0, len(frame_data), 10):
+        anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
+        anchors[: N - 1] -= anchors[-3].clone()
+        solver.solve(anchors, weights)
+        print(kinematics.fmt_skeleton(graph))
+        ax.cla()
+        draw(ax, graph, anchors, draw_vertex_labels=True)
+        ax.set_xlim(-5.0, 5.0)
+        ax.set_xlabel("x")
+        ax.set_ylim(-5.0, 5.0)
+        ax.set_ylabel("y")
+        ax.set_zlim(-5.0, 5.0)
+        ax.set_zlabel("z")
+        plt.show(block=False)
+        plt.pause(0.01)
+        # plt.show()
 
     print(kinematics.fk(graph))
 
