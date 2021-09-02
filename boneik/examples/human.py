@@ -7,6 +7,7 @@ import torch
 import pickle
 
 from boneik import kinematics, solvers
+from boneik import bvh
 
 
 def make_tuv(length: float, axis_in_parent: str):
@@ -243,40 +244,44 @@ def main():
             "root",
         ]
     )
-    N = graph.number_of_nodes()
-    frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
 
-    solver = solvers.IKSolver(graph)
+    fk = kinematics.fk(graph)
+    bvh.export_bvh(graph, [fk])
 
-    fig = plt.figure(figsize=plt.figaspect(0.5))
-    ax = fig.add_subplot(1, 1, 1, projection="3d")
-    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    # N = graph.number_of_nodes()
+    # frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
 
-    anchors = torch.zeros((N, 3))
-    weights = torch.ones(N)
-    weights[-1] = 0
+    # solver = solvers.IKSolver(graph)
 
-    for i in range(0, len(frame_data), 10):
-        anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
-        anchors[: N - 1] -= anchors[-3].clone()
-        solver.solve(anchors, weights)
-        print(kinematics.fmt_skeleton(graph))
-        ax.cla()
-        draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
-        ax.set_xlim(-5.0, 5.0)
-        ax.set_xlabel("x")
-        ax.set_ylim(-5.0, 5.0)
-        ax.set_ylabel("y")
-        ax.set_zlim(-5.0, 5.0)
-        ax.set_zlabel("z")
-        fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
-        plt.show(block=False)
-        plt.pause(0.01)
-        # plt.show()
+    # fig = plt.figure(figsize=plt.figaspect(0.5))
+    # ax = fig.add_subplot(1, 1, 1, projection="3d")
+    # ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    # ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    # ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
 
-    print(kinematics.fk(graph))
+    # anchors = torch.zeros((N, 3))
+    # weights = torch.ones(N)
+    # weights[-1] = 0
+
+    # for i in range(0, len(frame_data), 10):
+    #     anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
+    #     anchors[: N - 1] -= anchors[-3].clone()
+    #     solver.solve(anchors, weights)
+    #     print(kinematics.fmt_skeleton(graph))
+    #     ax.cla()
+    #     draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
+    #     ax.set_xlim(-5.0, 5.0)
+    #     ax.set_xlabel("x")
+    #     ax.set_ylim(-5.0, 5.0)
+    #     ax.set_ylabel("y")
+    #     ax.set_zlim(-5.0, 5.0)
+    #     ax.set_zlabel("z")
+    #     fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
+    #     plt.show(block=False)
+    #     plt.pause(0.01)
+    #     # plt.show()
+
+    # print(kinematics.fk(graph))
 
 
 def makefile():
