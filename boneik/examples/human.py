@@ -251,49 +251,53 @@ def main():
     frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
 
     poses = []
-    poses.append(kinematics.fk(graph))
-    graph[2][3]["bone"].rx.set_angle(-90)
-    poses.append(kinematics.fk(graph))
+    # poses.append(kinematics.fk(graph))
+    # graph[2][3]["bone"].rx.set_angle(-90)
+    # poses.append(kinematics.fk(graph))
 
     fig = plt.figure(figsize=plt.figaspect(0.5))
     ax = fig.add_subplot(1, 1, 1, projection="3d")
     ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
     ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
     ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    ax.set_xlim(-5.0, 5.0)
-    ax.set_xlabel("x")
-    ax.set_ylim(-5.0, 5.0)
-    ax.set_ylabel("y")
-    ax.set_zlim(-5.0, 5.0)
-    ax.set_zlabel("z")
-    draw(ax, graph, anchors=None, draw_vertex_labels=False, draw_local_frames=True)
-    plt.show()
-    bvh.export_bvh(graph, poses)
-    return
+    # ax.set_xlim(-5.0, 5.0)
+    # ax.set_xlabel("x")
+    # ax.set_ylim(-5.0, 5.0)
+    # ax.set_ylabel("y")
+    # ax.set_zlim(-5.0, 5.0)
+    # ax.set_zlabel("z")
+    # draw(ax, graph, anchors=None, draw_vertex_labels=False, draw_local_frames=True)
+    # plt.show()
+    # bvh.export_bvh(graph, poses)
+    # return
 
     solver = solvers.IKSolver(graph)
     anchors = torch.zeros((N, 3))
     weights = torch.ones(N)
     weights[-1] = 0
 
-    for i in range(250, 500, 10):
+    for i in range(400, 600, 10):
         anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
-        anchors[: N - 1] -= anchors[-3].clone()
-        solver.solve(anchors, weights)
-        poses.append(kinematics.fk(graph))
-        ax.cla()
-        draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
-        ax.set_xlim(-5.0, 5.0)
-        ax.set_xlabel("x")
-        ax.set_ylim(-5.0, 5.0)
-        ax.set_ylabel("y")
-        ax.set_zlim(-5.0, 5.0)
-        ax.set_zlabel("z")
-        fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
-        plt.show()
-        break
-        # plt.show(block=False)
-        # plt.pause(0.01)
+        # anchors[: N - 1] -= anchors[-3].clone()
+        loss = solver.solve(anchors, weights)
+        if loss > 0.3:
+            kinematics.reset_dofs(graph)
+            loss = solver.solve(anchors, weights)
+        if loss < 0.1:
+            poses.append(kinematics.fk(graph))
+            ax.cla()
+            draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
+            ax.set_xlim(-5.0, 5.0)
+            ax.set_xlabel("x")
+            ax.set_ylim(-5.0, 5.0)
+            ax.set_ylabel("y")
+            ax.set_zlim(-5.0, 5.0)
+            ax.set_zlabel("z")
+            fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
+            plt.show(block=False)
+            plt.pause(0.01)
+        else:
+            kinematics.reset_dofs(graph)
 
     bvh.export_bvh(graph, poses, frame_time=1 / 3.0)
 

@@ -128,18 +128,19 @@ def _generate_motion(
     for fk in poses:
         parts = []
         for mo, (u, parent) in enumerate(motion_order):
-            x = _rigid_inv(fk[parent]) @ fk[u]
-            y = _rigid_inv(poses[0][parent]) @ poses[0][u]
-            # m = _rigid_inv(poses[0][u]) @ fk[u]
-            m = x @ _rigid_inv(y)
-            # m = _rigid_inv(poses[0][u]) @ ()
-            print(u)
-            print(_rigid_inv(fk[parent]) @ fk[u])
-            print(poses[0][parent])
+            du = fk[u] @ _rigid_inv(poses[0][u])
+            dp = fk[parent] @ _rigid_inv(poses[0][parent])
+            m = _rigid_inv(dp) @ du
             mask = abs(m) < 1e-6
             m[mask] = 0.0
             t = T.translation_from_matrix(m)
             r = T.euler_from_matrix(m, axes="sxyz")
+            if (parent == 2 and u == 3) or (parent == 3 and u == 4):
+                print(parent, u)
+                print(du)
+                print(dp)
+                print(m)
+                print(r)
             if degrees:
                 r = np.rad2deg(r)
             if parent == graph.graph["root"]:
@@ -192,14 +193,14 @@ if __name__ == "__main__":
     g.bone(
         "c",
         "d",
-        utils.make_tuv(0.5, "x,y,z"),
-        **utils.make_dofs(rx=45.0, irx=(-90.0, 90.0)),
+        utils.make_tuv(0.5, "z,-x,-y"),
+        **utils.make_dofs(rz=0.0, irz=(-90.0, 90.0)),
     )
     g.bone(
         "c",
         "e",
-        utils.make_tuv(0.5, "x,y,z"),
-        **utils.make_dofs(rx=-45.0, irx=(-90.0, 90.0)),
+        utils.make_tuv(0.5, "z,x,y"),
+        **utils.make_dofs(rz=0, irz=(-90.0, 90.0)),
     )
     graph = g.create_graph(["a", "b", "c", "d", "e"])
 
@@ -216,6 +217,22 @@ if __name__ == "__main__":
     ax.set_ylabel("y")
     ax.set_zlim(-5.0, 5.0)
     ax.set_zlabel("z")
+    # draw.draw(
+    #     ax,
+    #     graph,
+    #     anchors=None,
+    #     draw_vertex_labels=True,
+    #     draw_local_frames=True,
+    #     hide_root=False,
+    # )
+    # plt.show()
+
+    graph[0][1]["bone"].rx.set_angle(np.pi / 4)
+    graph[0][1]["bone"].tx.set_offset(2.0)
+    graph[2][3]["bone"].rz.set_angle(-np.pi / 2)
+    graph[2][4]["bone"].rz.set_angle(np.pi / 2)
+    poses.append(kinematics.fk(graph))
+
     draw.draw(
         ax,
         graph,
@@ -225,11 +242,5 @@ if __name__ == "__main__":
         hide_root=False,
     )
     plt.show()
-
-    graph[0][1]["bone"].rx.set_angle(np.pi / 4)
-    graph[0][1]["bone"].tx.set_offset(2.0)
-    graph[2][3]["bone"].rx.set_angle(0)
-    graph[2][4]["bone"].rx.set_angle(0)
-    poses.append(kinematics.fk(graph))
 
     export_bvh(graph, poses, frame_time=2.0)  # forward y, up z in blender
