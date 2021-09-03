@@ -91,6 +91,10 @@ class BaseTransDOF(torch.nn.Module):
     def reset_(self):
         self.offset.data.fill_(self._reset_value)
 
+    @torch.no_grad()
+    def set_offset(self, offset: float):
+        self.offset.data.fill_(offset)
+
 
 class TransX(BaseTransDOF):
     def matrix(self) -> torch.Tensor:
