@@ -30,44 +30,46 @@ def make_tuv(length: float, axis_in_parent: str):
 
 
 def make_dofs(**kwargs):
-    a = kwargs.get("rx", None)
-    i = kwargs.get("rxi", None)
+    a = kwargs.pop("rx", None)
+    i = kwargs.pop("irx", None)
     rx = None
     if a is not None:
         if i is not None:
             i = tuple([np.deg2rad(a) for a in i])
         rx = kinematics.RotX(angle=np.deg2rad(a), interval=i)
 
-    a = kwargs.get("ry", None)
-    i = kwargs.get("ryi", None)
+    a = kwargs.pop("ry", None)
+    i = kwargs.pop("iry", None)
     ry = None
     if a is not None:
         if i is not None:
             i = tuple([np.deg2rad(a) for a in i])
         ry = kinematics.RotY(angle=np.deg2rad(a), interval=i)
 
-    a = kwargs.get("rz", None)
-    i = kwargs.get("rzi", None)
+    a = kwargs.pop("rz", None)
+    i = kwargs.pop("irz", None)
     rz = None
     if a is not None:
         if i is not None:
             i = tuple([np.deg2rad(a) for a in i])
         rz = kinematics.RotZ(angle=np.deg2rad(a), interval=i)
 
-    o = kwargs.get("tx", None)
+    o = kwargs.pop("tx", None)
     tx = None
     if o is not None:
         tx = kinematics.TransX(offset=o)
 
-    o = kwargs.get("ty", None)
+    o = kwargs.pop("ty", None)
     ty = None
     if o is not None:
         ty = kinematics.TransY(offset=o)
 
-    o = kwargs.get("tz", None)
+    o = kwargs.pop("tz", None)
     tz = None
     if o is not None:
         tz = kinematics.TransZ(offset=o)
+
+    assert len(kwargs) == 0, f"Unknown kwargs {list(kwargs.keys())}"
 
     return dict(rx=rx, ry=ry, rz=rz, tx=tx, ty=ty, tz=tz)
 
@@ -151,8 +153,8 @@ def main():
         "elbow.L",
         make_tuv(1.8189, "x,y,z"),
         **make_dofs(
-            rx=0.0,
-            irx=(-90.0, 90.0),
+            rx=0,
+            irx=(-90.0, 30.0),
             ry=0.0,
             iry=(-90.0, 90.0),
             rz=0.0,
@@ -163,7 +165,7 @@ def main():
         "elbow.L",
         "hand.L",
         make_tuv(1.1908, "x,y,z"),
-        **make_dofs(rz=0.0, irz=(-135.0, 0.0)),
+        **make_dofs(rz=0, irz=(-135.0, 0.0)),
     )
 
     g.bone("neck", "shoulder.R", make_tuv(0.71612, "z,x,y"))
@@ -172,8 +174,8 @@ def main():
         "elbow.R",
         make_tuv(1.8189, "x,y,z"),
         **make_dofs(
-            rx=0.0,
-            irx=(-90.0, 90.0),
+            rx=0,
+            irx=(-90.0, 30.0),
             rz=0.0,
             irz=(-90.0, 90.0),
             ry=0.0,
@@ -184,7 +186,7 @@ def main():
         "elbow.R",
         "hand.R",
         make_tuv(1.1908, "x,y,z"),
-        **make_dofs(rz=0.0, irz=(0.0, 135.0)),
+        **make_dofs(rz=0, irz=(0.0, 135.0)),
     )
 
     g.bone("torso", "hip.L", make_tuv(1.1542, "-y,x,z"))
@@ -193,7 +195,7 @@ def main():
         "knee.L",
         make_tuv(2.2245, "x,-z,y"),
         **make_dofs(
-            rz=0.0, irz=(-90.0, 90), rx=0.0, irx=(-20.0, 20), ry=0.0, iry=(-10.0, 10.0)
+            ry=0, iry=(-90.0, 90), rx=0.0, irx=(-20.0, 20), rz=0.0, irz=(-20.0, 20.0)
         ),
     )
     g.bone(
@@ -209,7 +211,7 @@ def main():
         "knee.R",
         make_tuv(2.2245, "x,-z,y"),
         **make_dofs(
-            rz=0.0, irz=(-90.0, 90), rx=0.0, irx=(-20.0, 20), ry=0.0, iry=(-10.0, 10.0)
+            ry=0.0, iry=(-90.0, 90), rx=0.0, irx=(-20.0, 20), rz=0.0, irz=(-20.0, 20.0)
         ),
     )
     g.bone(
@@ -245,43 +247,55 @@ def main():
         ]
     )
 
-    fk = kinematics.fk(graph)
-    bvh.export_bvh(graph, [fk])
+    N = graph.number_of_nodes()
+    frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
 
-    # N = graph.number_of_nodes()
-    # frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
+    poses = []
+    poses.append(kinematics.fk(graph))
+    graph[2][3]["bone"].rx.set_angle(-90)
+    poses.append(kinematics.fk(graph))
 
-    # solver = solvers.IKSolver(graph)
+    fig = plt.figure(figsize=plt.figaspect(0.5))
+    ax = fig.add_subplot(1, 1, 1, projection="3d")
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.set_xlim(-5.0, 5.0)
+    ax.set_xlabel("x")
+    ax.set_ylim(-5.0, 5.0)
+    ax.set_ylabel("y")
+    ax.set_zlim(-5.0, 5.0)
+    ax.set_zlabel("z")
+    draw(ax, graph, anchors=None, draw_vertex_labels=False, draw_local_frames=True)
+    plt.show()
+    bvh.export_bvh(graph, poses)
+    return
 
-    # fig = plt.figure(figsize=plt.figaspect(0.5))
-    # ax = fig.add_subplot(1, 1, 1, projection="3d")
-    # ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    # ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    # ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    solver = solvers.IKSolver(graph)
+    anchors = torch.zeros((N, 3))
+    weights = torch.ones(N)
+    weights[-1] = 0
 
-    # anchors = torch.zeros((N, 3))
-    # weights = torch.ones(N)
-    # weights[-1] = 0
+    for i in range(250, 500, 10):
+        anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
+        anchors[: N - 1] -= anchors[-3].clone()
+        solver.solve(anchors, weights)
+        poses.append(kinematics.fk(graph))
+        ax.cla()
+        draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
+        ax.set_xlim(-5.0, 5.0)
+        ax.set_xlabel("x")
+        ax.set_ylim(-5.0, 5.0)
+        ax.set_ylabel("y")
+        ax.set_zlim(-5.0, 5.0)
+        ax.set_zlabel("z")
+        fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
+        plt.show()
+        break
+        # plt.show(block=False)
+        # plt.pause(0.01)
 
-    # for i in range(0, len(frame_data), 10):
-    #     anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
-    #     anchors[: N - 1] -= anchors[-3].clone()
-    #     solver.solve(anchors, weights)
-    #     print(kinematics.fmt_skeleton(graph))
-    #     ax.cla()
-    #     draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
-    #     ax.set_xlim(-5.0, 5.0)
-    #     ax.set_xlabel("x")
-    #     ax.set_ylim(-5.0, 5.0)
-    #     ax.set_ylabel("y")
-    #     ax.set_zlim(-5.0, 5.0)
-    #     ax.set_zlabel("z")
-    #     fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
-    #     plt.show(block=False)
-    #     plt.pause(0.01)
-    #     # plt.show()
-
-    # print(kinematics.fk(graph))
+    bvh.export_bvh(graph, poses, frame_time=1 / 3.0)
 
 
 def makefile():

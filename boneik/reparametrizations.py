@@ -26,16 +26,17 @@ class ConstrainedAngleReparametrization:
 
     def __init__(self, open_interval: Optional[Tuple[float, float]] = None) -> None:
         if open_interval is None:
-            self.i = (-PI, PI)
-            self.length = 2 * PI
+            self.i = torch.tensor([-PI, PI]).float()
             self.is_constrained = False
         else:
-            self.i = open_interval
-            self.length = self.i[1] - self.i[0]
+            self.i = torch.as_tensor(open_interval).float()
             self.is_constrained = True
+        self.length = self.i[1] - self.i[0]
+        assert self.length > 0, "Upper limit must be greater than lower limit"
         assert (
-            open_interval is None or self.length <= PI
-        ), "Constrained interval must be <= PI."
+            not self.is_constrained or self.length <= PI
+        ), "Constrained interval must be <= PI"
+
         self._init_affine()
 
     def _init_affine(self):
@@ -74,13 +75,11 @@ class ConstrainedAngleReparametrization:
         return z
 
     def angle2log(self, theta: torch.Tensor) -> torch.Tensor:
-        if self.is_constrained and (theta <= self.i[0] or theta >= self.i[1]):
-            theta = (self.i[0] + self.i[1]) * 0.5
-            warnings.warn(
-                f"Angle out of bounds, changing to midpoint {theta:.3f}",
-                BoundsViolatedWarning,
-            )
         theta = torch.as_tensor(theta).float()
+        if self.is_constrained and (theta <= self.i[0] or theta >= self.i[1]):
+            # Limit to open interval
+            eps = torch.finfo(theta.dtype).eps
+            theta = torch.clamp(theta, self.i[0] + 2 * eps, self.i[1] - 2 * eps)
         z = torch.tensor([torch.cos(theta), torch.sin(theta)])
         return self.log(z)
 

@@ -36,6 +36,10 @@ class BaseRotDOF(torch.nn.Module):
     def reset_(self):
         self.uangle.data[:] = self._reset_value
 
+    @torch.no_grad()
+    def set_angle(self, angle: float):
+        self.uangle.data[:] = self.reparam.angle2log(angle).float()
+
 
 class RotX(BaseRotDOF):
     def matrix(self) -> torch.Tensor:
