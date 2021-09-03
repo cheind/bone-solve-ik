@@ -156,7 +156,7 @@ def _generate_motion(
 def export_bvh(
     graph: SkeletonGraph,
     poses: List[torch.FloatTensor],
-    frame_time: float = 1.0,
+    frame_time: float = 1.0 / 30,
     degrees: bool = True,
 ) -> List[str]:
     lines = ["HIERARCHY"]
@@ -227,8 +227,9 @@ if __name__ == "__main__":
     plt.show()
 
     graph[0][1]["bone"].rx.set_angle(np.pi / 4)
+    graph[0][1]["bone"].tx.set_offset(2.0)
     graph[2][3]["bone"].rx.set_angle(0)
     graph[2][4]["bone"].rx.set_angle(0)
     poses.append(kinematics.fk(graph))
 
-    export_bvh(graph, poses)  # forward y, up z in blender
+    export_bvh(graph, poses, frame_time=2.0)  # forward y, up z in blender
