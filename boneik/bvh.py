@@ -81,27 +81,28 @@ def _generate_hierarchy(
     motion_order = []
 
     def _traverse(u: int, parent: int, depth: int):
-        print(parent, u)
         ul = graph.nodes[u]["label"]
-        if parent is not None:
-            off = (fk[u] - fk[parent])[:3, 3]
-        else:
-            off = [0.0, 0.0, 0.0]
-        has_dof = True
-        if graph.out_degree(u) == 0:
-            jtype = "End Site"
-            has_dof = False
-        elif depth == 0:
-            jtype = "ROOT"
-        else:
-            jtype = "JOINT"
+        succ = list(graph.successors(u))
+        is_root = parent is None
+        is_endsite = len(succ) == 0
 
-        lines.extend(_begin_joint(jtype, ul, off, depth, intend))
-        for n in list(graph.successors(u)):
-            if has_dof:
+        if is_endsite:
+            off = (fk[u] - fk[parent])[:3, 3]
+            lines.extend(_begin_joint("End Site", ul, off, depth, intend))
+            lines.extend(_end_joint(depth, intend))
+        else:
+            if is_root:
+                off = [0.0, 0.0, 0.0]
+                jtype = "ROOT"
+            else:
+                off = (fk[u] - fk[parent])[:3, 3]
+                jtype = "JOINT"
+
+            for idx, n in enumerate(succ):
+                lines.extend(_begin_joint(jtype, f"{ul}.{idx:02d}", off, depth, intend))
                 motion_order.append((n, u))
-            _traverse(n, u, depth + 1)
-        lines.extend(_end_joint(depth, intend))
+                _traverse(n, u, depth + 1)
+                lines.extend(_end_joint(depth, intend))
 
     # motion_order.append((nroot, None))
     _traverse(root, None, 0)
@@ -226,6 +227,8 @@ if __name__ == "__main__":
     plt.show()
 
     graph[0][1]["bone"].rx.set_angle(np.pi / 4)
+    graph[2][3]["bone"].rx.set_angle(0)
+    graph[2][4]["bone"].rx.set_angle(0)
     poses.append(kinematics.fk(graph))
 
     export_bvh(graph, poses)  # forward y, up z in blender
