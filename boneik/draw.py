@@ -1,5 +1,7 @@
 import torch
+import numpy as np
 from . import kinematics
+import matplotlib.pyplot as plt
 
 
 def draw_axis(ax3d, t_world: torch.Tensor, length: float = 0.5, lw: float = 1.0):
@@ -53,3 +55,24 @@ def draw(
         #     ax3d.text(
         #         anchors[u, 0], anchors[u, 1], anchors[u, 2], label, fontsize="x-small"
         #     )
+
+
+def create_figure3d(axes_ranges=None):
+    fig = plt.figure(figsize=plt.figaspect(1))
+    ax = fig.add_subplot(1, 1, 1, projection="3d")
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    if axes_ranges is None:
+        axes_ranges = [[-20, 20], [-20, 20], [-2, 5]]
+    ax.set_box_aspect(
+        (np.ptp(axes_ranges[0]), np.ptp(axes_ranges[1]), np.ptp(axes_ranges[2]))
+    )
+    ax.set_xlim(*axes_ranges[0])
+    ax.set_xlim(*axes_ranges[0])
+    ax.set_xlabel("x")
+    ax.set_ylim(*axes_ranges[1])
+    ax.set_ylabel("y")
+    ax.set_zlim(*axes_ranges[2])
+    ax.set_zlabel("z")
+    return fig, ax
