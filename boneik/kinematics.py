@@ -51,9 +51,9 @@ class Bone(torch.nn.Module):
             self.tx.matrix()
             @ self.ty.matrix()
             @ self.tz.matrix()
-            @ self.rx.matrix()
-            @ self.ry.matrix()
             @ self.rz.matrix()
+            @ self.ry.matrix()
+            @ self.rx.matrix()
             @ self.t_uv
         )
 
