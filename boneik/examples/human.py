@@ -214,11 +214,11 @@ def main():
             loss = solver.solve(anchors, weights)
         if loss < 0.1:
             print(f", solved", end=None)
-            graph[16][14]["bone"].tx.set_offset(xyz[0])
-            graph[16][14]["bone"].ty.set_offset(xyz[1])
-            graph[16][14]["bone"].tz.set_offset(xyz[2])
+            # graph[16][14]["bone"].tx.set_offset(xyz[0])
+            # graph[16][14]["bone"].ty.set_offset(xyz[1])
+            # graph[16][14]["bone"].tz.set_offset(xyz[2])
             poses.append(kinematics.fk(graph))
-        anchors[: N - 1] += xyz
+        # anchors[: N - 1] += xyz
 
         fig, ax = draw.create_figure3d(axes_ranges=axes_ranges)
         draw.draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
