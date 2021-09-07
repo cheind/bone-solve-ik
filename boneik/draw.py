@@ -21,31 +21,33 @@ def draw_axis(ax3d, t_world: torch.Tensor, length: float = 0.5, lw: float = 1.0)
 def draw(
     ax3d,
     graph: kinematics.SkeletonGraph,
+    fk: torch.FloatTensor = None,
     anchors: torch.Tensor = None,
     draw_local_frames: bool = True,
     draw_vertex_labels: bool = False,
     hide_root: bool = True,
 ):
-    fkt = kinematics.fk(graph)
+    if fk is None:
+        fk = kinematics.fk(graph)
     root = graph.graph["root"]
     for u, v in graph.graph["bfs_edges"]:
         if u == root and hide_root:
             continue
-        x = fkt[[u, v], 0, 3].numpy()
-        y = fkt[[u, v], 1, 3].numpy()
-        z = fkt[[u, v], 2, 3].numpy()
+        x = fk[[u, v], 0, 3].numpy()
+        y = fk[[u, v], 1, 3].numpy()
+        z = fk[[u, v], 2, 3].numpy()
         ax3d.plot(x, y, z, lw=1, c="k", linestyle="--")
         ax3d.scatter(x[1], y[1], z[1], c="k")
     if draw_local_frames:
         if not hide_root:
-            draw_axis(ax3d, fkt[root])
+            draw_axis(ax3d, fk[root])
         for _, v in graph.graph["bfs_edges"]:
-            draw_axis(ax3d, fkt[v])
+            draw_axis(ax3d, fk[v])
     if draw_vertex_labels:
         for u, label in graph.nodes.data("label"):
             if u == root and hide_root:
                 continue
-            xyz = fkt[u, :3, 3].numpy()
+            xyz = fk[u, :3, 3].numpy()
             ax3d.text(xyz[0], xyz[1], xyz[2], label, fontsize="x-small")
 
     if anchors is not None:
@@ -57,9 +59,8 @@ def draw(
         #     )
 
 
-def create_figure3d(axes_ranges=None):
-    fig = plt.figure(figsize=plt.figaspect(1))
-    ax = fig.add_subplot(1, 1, 1, projection="3d")
+def create_axis3d(fig, pos=(1, 1, 1), axes_ranges=None):
+    ax = fig.add_subplot(*pos, projection="3d")
     ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
     ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
     ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
@@ -75,4 +76,9 @@ def create_figure3d(axes_ranges=None):
     ax.set_ylabel("y")
     ax.set_zlim(*axes_ranges[2])
     ax.set_zlabel("z")
-    return fig, ax
+    return ax
+
+
+def create_figure3d(axes_ranges=None):
+    fig = plt.figure(figsize=plt.figaspect(1))
+    return fig, create_axis3d(fig, (1, 1, 1), axes_ranges)

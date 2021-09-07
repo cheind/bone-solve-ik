@@ -8,51 +8,9 @@ from typing import List, Tuple
 import numpy as np
 import networkx as nx
 
-# def _generate_hierarchy(
-#     u: int,
-#     p: int,
-#     graph: SkeletonGraph,
-#     fk: torch.FloatTensor,
-#     intend: int,
-#     node_order: List[int],
-# ) -> List[str]:
-#     lines = []
-
-#     if u == graph.graph["root"]:
-#         node_order.append(u)
-#         lines.append(f"ROOT {graph.nodes[u]['label']}")
-#         lines.append("{")
-#         intend += 4
-#         lines.append(" " * intend + "OFFSET 0 0 0")
-#         lines.append(
-#             " " * intend
-#             + "CHANNELS 6 Xposition Yposition Zposition Xrotation Yrotation Zrotation"
-#         )
-#     else:
-#         t = (fk[u] - fk[p])[:3, 3]
-#         if graph.out_degree(u) == 0:
-#             lines.append(" " * intend + "End Site")
-#             lines.append(" " * intend + "{")
-#             intend += 4
-#             lines.append(" " * intend + f"OFFSET {t[0]:.4f} {t[1]:.4f} {t[2]:.4f}")
-#         else:
-#             node_order.append(u)
-#             lines.append(" " * intend + f"JOINT {graph.nodes[u]['label']}")
-#             lines.append(" " * intend + "{")
-#             intend += 4
-#             lines.append(" " * intend + f"OFFSET {t[0]:.4f} {t[1]:.4f} {t[2]:.4f}")
-#             lines.append(" " * intend + "CHANNELS 3 Xrotation Yrotation Zrotation")
-
-#     for v in graph.successors(u):
-#         lines.extend(_generate_hierarchy(v, u, graph, fk, intend, node_order))
-
-#     intend -= 4
-#     lines.append(" " * intend + "}")
-#     return lines
-
 
 def _begin_joint(
-    jtype: str, name: str, off: torch.FloatTensor, depth: int, intend: int
+    jtype: str, name: str, off: torch.FloatTensor, dof: int, depth: int, intend: int
 ) -> List[str]:
     lines = []
     spaces = " " * depth * intend
@@ -60,11 +18,11 @@ def _begin_joint(
     lines.append(f"{spaces}{{")
     spaces = " " * (depth + 1) * intend
     lines.append(f"{spaces}OFFSET {off[0]:.4f} {off[1]:.4f} {off[2]:.4f}")
-    if jtype == "ROOT":
+    if dof == 6:
         lines.append(
             f"{spaces}CHANNELS 6 Xposition Yposition Zposition Xrotation Yrotation Zrotation"
         )
-    elif jtype == "JOINT":
+    elif dof == 3:
         lines.append(f"{spaces}CHANNELS 3 Xrotation Yrotation Zrotation")
     return lines
 
@@ -84,39 +42,70 @@ def _generate_hierarchy(
     def _traverse(u: int, parent: int, depth: int):
         ul = graph.nodes[u]["label"]
         succ = list(graph.successors(u))
-        is_root = parent is None
+        is_first = parent == root
         is_endsite = len(succ) == 0
+        off = (fk[u] - fk[parent])[:3, 3]
 
         if is_endsite:
-            off = (fk[u] - fk[parent])[:3, 3]
-            lines.extend(_begin_joint("End Site", ul, off, depth, intend))
-            lines.extend(_end_joint(depth, intend))
+            lines.extend(_begin_joint("End Site", ul, off, 0, depth, intend))
+        elif is_first:
+            lines.extend(_begin_joint("ROOT", ul, [0, 0, 0], 6, depth, intend))
         else:
-            if is_root:
-                off = [0.0, 0.0, 0.0]
-                jtype = "ROOT"
-            else:
-                off = (fk[u] - fk[parent])[:3, 3]
-                jtype = "JOINT"
+            lines.extend(_begin_joint("JOINT", ul, off, 3, depth, intend))
 
+        if not is_endsite:
+            motion_order.append((u, parent))
+
+        if len(succ) == 1:
+            _traverse(succ[0], u, depth + 1)
+        elif len(succ) > 1:
             for idx, n in enumerate(succ):
-                lines.extend(_begin_joint(jtype, f"{ul}.{idx:02d}", off, depth, intend))
-                motion_order.append((n, u))
-                _traverse(n, u, depth + 1)
-                lines.extend(_end_joint(depth, intend))
+                lines.extend(
+                    _begin_joint(
+                        "JOINT", f"{ul}.{idx:02d}", [0, 0, 0], 3, depth + 1, intend
+                    )
+                )
+                _traverse(n, u, depth + 2)
+                lines.extend(_end_joint(depth + 1, intend))
+        lines.extend(_end_joint(depth, intend))
 
     # motion_order.append((nroot, None))
-    _traverse(root, None, 0)
+    _traverse(next(graph.successors(root)), root, 0)
     print(motion_order)
 
     return lines, motion_order
 
 
-def _rigid_inv(m: torch.FloatTensor) -> torch.FloatTensor:
+def _rinv(m: torch.FloatTensor) -> torch.FloatTensor:
     minv = torch.eye(4)
     minv[:3, :3] = m[:3, :3].T
     minv[:3, 3] = -(m[:3, :3].T @ m[:3, 3])
     return minv
+
+
+def _skew(x: torch.FloatTensor) -> torch.FloatTensor:
+    m = torch.zeros((3, 3))
+    m[0, 1] = -x[2]
+    m[0, 2] = x[1]
+    m[1, 0] = x[2]
+    m[1, 2] = -x[0]
+    m[2, 0] = -x[1]
+    m[2, 1] = x[0]
+    return m
+
+
+def _rot(t: torch.FloatTensor, p: torch.FloatTensor) -> torch.FloatTensor:
+    n = torch.cross(t, p)
+    nn = torch.norm(n)
+    if nn < 1e-6:
+        R = torch.eye(3)
+    else:
+        s = _skew(n / nn)
+        ntp = torch.norm(t) * torch.norm(p)
+        cosalpha = torch.dot(t, p) / ntp
+        sinalpha = nn / ntp
+        R = torch.eye(3) + sinalpha * s + (1 - cosalpha) * torch.matrix_power(s, 2)
+    return R
 
 
 def _generate_motion(
@@ -128,33 +117,28 @@ def _generate_motion(
     lines = []
     for fk in poses:
         parts = []
-        for mo, (u, parent) in enumerate(motion_order):
-            # du = fk[u] @ _rigid_inv(poses[0][u])
-            # dp = fk[parent] @ _rigid_inv(poses[0][parent])
-            # m = _rigid_inv(dp) @ du
+        for u, parent in motion_order:
 
-            dup = _rigid_inv(fk[parent]) @ fk[u]
-            dr = _rigid_inv(poses[0][parent]) @ poses[0][u]
-            m = dup @ _rigid_inv(dr)
-            mask = abs(m) < 1e-6
-            m[mask] = 0.0
-            t = T.translation_from_matrix(m)
+            tp = poses[0][parent] @ _rinv(fk[parent]) @ fk[u]
+            t = poses[0][u][:3, 3] - poses[0][parent][:3, 3]
+            p = tp[:3, 3] - poses[0][parent][:3, 3]
+            R = _rot(t, p)
+            m = torch.eye(4)
+            m[:3, :3] = R
+            # t = [0, 0, 0]
             r = T.euler_from_matrix(m, axes="sxyz")
 
-            # print(T.euler_from_matrix(ddu, axes="sxyz"))
-
-            # ddp = _rigid_inv(poses[0][parent]) @ fk[parent]
-
-            # print(dp)
-            #
-            print("-" * 20)
             if degrees:
                 r = np.rad2deg(r)
             if parent == graph.graph["root"]:
+                print("root")
+                t = poses[0][parent]
+                off = [0, 0, 0]
                 parts.append(
-                    f"{t[0]:.4f} {t[1]:.4f} {t[2]:.4f} {r[0]:.4f} {r[1]:.4f} {r[2]:.4f}"
+                    f"{off[0]:.4f} {off[1]:.4f} {off[2]:.4f} {r[0]:.4f} {r[1]:.4f} {r[2]:.4f}"
                 )
             else:
+                print("otherwise")
                 parts.append(f"{r[0]:.4f} {r[1]:.4f} {r[2]:.4f}")
         lines.append(" ".join(parts))
     return lines
@@ -191,35 +175,22 @@ def blender_test():
 
     poses = [kinematics.fk(graph)]
 
-    fig, ax = draw.create_figure3d([[-5, 5], [-5, 5], [-5, 5]])
-    draw.draw(
-        ax,
-        graph,
-        anchors=None,
-        draw_vertex_labels=True,
-        draw_local_frames=True,
-        hide_root=False,
-    )
-    plt.show()
-
     graph[0][1]["bone"].rz.set_angle(np.deg2rad(-45))
     graph[1][2]["bone"].rx.set_angle(np.deg2rad(-45))
     graph[1][2]["bone"].ry.set_angle(np.deg2rad(45))
     graph[1][2]["bone"].rz.set_angle(np.deg2rad(-90))
     poses.append(kinematics.fk(graph))
 
-    fig, ax = draw.create_figure3d([[-5, 5], [-5, 5], [-5, 5]])
-    draw.draw(
-        ax,
-        graph,
-        anchors=None,
-        draw_vertex_labels=True,
-        draw_local_frames=True,
-        hide_root=False,
-    )
-    plt.show()
-
     export_bvh(graph, poses, frame_time=2.0)
+
+    ranges = [[-5, 5], [-5, 5], [-5, 5]]
+    fig = plt.figure()
+    ax0 = draw.create_axis3d(fig, (1, 2, 1), ranges)
+    ax1 = draw.create_axis3d(fig, (1, 2, 2), ranges)
+
+    draw.draw(ax0, graph, fk=poses[0], draw_local_frames=True, hide_root=False)
+    draw.draw(ax1, graph, fk=poses[1], draw_local_frames=True, hide_root=False)
+    plt.show()
 
 
 if __name__ == "__main__":
