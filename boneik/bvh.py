@@ -136,7 +136,9 @@ def _generate_motion(
         parts = []
         for u, v in motion_order:
             if u == root:
-                m = fk[v]
+                m = fk[
+                    v
+                ]  # the method below will not work for bones of zero length, like root -> torso.
             else:
                 tp = poses[0][u] @ _rinv(fk[u]) @ fk[v]
                 t = poses[0][v][:3, 3] - poses[0][u][:3, 3]
