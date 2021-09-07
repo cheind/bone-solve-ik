@@ -2,8 +2,11 @@ from functools import partial
 
 import torch
 import torch.optim as optim
+import logging
 
 from . import kinematics
+
+_logger = logging.getLogger("boneik")
 
 
 def vanilla_bone_loss(
@@ -65,7 +68,7 @@ class IKSolver:
                 break
             last_loss = loss
             self._normalize()
-        print(f"Completed after {e+1} epochs, loss {loss}")
+        _logger.debug(f"Completed after {e+1} epochs, loss {loss}")
         return loss
 
     def _normalize(self):

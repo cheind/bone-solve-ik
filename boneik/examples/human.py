@@ -189,10 +189,7 @@ def main():
     N = graph.number_of_nodes()
     frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
 
-    poses = []
-    # poses.append(kinematics.fk(graph))
-    # graph[2][3]["bone"].rx.set_angle(-90)
-    # poses.append(kinematics.fk(graph))
+    poses = [kinematics.fk(graph)]  # important to start here for BVH
 
     solver = solvers.IKSolver(graph)
     anchors = torch.zeros((N, 3))
@@ -201,34 +198,39 @@ def main():
 
     axes_ranges = [[-20, 20], [-20, 20], [-2, 5]]
 
-    # for i in range(400, 600, 10):
-    for i in [510, 520]:
-        print(f"Solving {i}", end=None)
+    for i in range(200, 600, 10):
+        # for i in [200, 510, 515, 520]:
         anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
         xyz = anchors[-3].clone()
         anchors[: N - 1] -= xyz
         loss = solver.solve(anchors, weights)
         if loss > 0.3:
-            print(f", retry", end=None)
             kinematics.reset_dofs(graph)
             loss = solver.solve(anchors, weights)
-        if loss < 0.1:
-            print(f", solved", end=None)
-            # graph[16][14]["bone"].tx.set_offset(xyz[0])
-            # graph[16][14]["bone"].ty.set_offset(xyz[1])
-            # graph[16][14]["bone"].tz.set_offset(xyz[2])
+        if loss < 0.3:
+            print("+", end="")
+            graph[16][14]["bone"].tx.set_offset(xyz[0])
+            graph[16][14]["bone"].ty.set_offset(xyz[1])
+            graph[16][14]["bone"].tz.set_offset(xyz[2])
             poses.append(kinematics.fk(graph))
-        # anchors[: N - 1] += xyz
+        else:
+            print("-", end="")
+        anchors[: N - 1] += xyz
 
-        fig, ax = draw.create_figure3d(axes_ranges=axes_ranges)
-        draw.draw(ax, graph, anchors, draw_vertex_labels=False, draw_local_frames=False)
-        fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
-        plt.show(block=True)
-        # plt.pause(0.01)
+        # fig, ax = draw.create_figure3d(axes_ranges=axes_ranges)
+        # draw.draw(
+        #     ax,
+        #     graph,
+        #     fk=kinematics.fk(graph),
+        #     anchors=None,
+        #     draw_vertex_labels=False,
+        #     draw_local_frames=False,
+        # )
+        # fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
+        # plt.show(block=True)
 
         if loss >= 0.1:
             kinematics.reset_dofs(graph)
-        print()
 
     bvh.export_bvh(graph, poses, frame_time=1 / 3.0)
 

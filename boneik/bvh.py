@@ -154,23 +154,26 @@ def _generate_motion(
     for fk in poses:
         parts = []
         for u, v in motion_order:
-            tp = poses[0][u] @ _rinv(fk[u]) @ fk[v]
-            t = poses[0][v][:3, 3] - poses[0][u][:3, 3]
-            p = tp[:3, 3] - poses[0][u][:3, 3]
-            R = _rot(t, p)
-            m = torch.eye(4)
-            m[:3, :3] = R
-            r = T.euler_from_matrix(m, axes="szyx")
+            if u == root:
+                m = fk[v]
+            else:
+                tp = poses[0][u] @ _rinv(fk[u]) @ fk[v]
+                t = poses[0][v][:3, 3] - poses[0][u][:3, 3]
+                p = tp[:3, 3] - poses[0][u][:3, 3]
+                R = _rot(t, p)
+                m = torch.eye(4)
+                m[:3, :3] = R
+            rot = T.euler_from_matrix(m, axes="szyx")
+            trans = T.translation_from_matrix(m)
 
             if degrees:
-                r = np.rad2deg(r)
+                rot = np.rad2deg(rot)
             if u == root:
-                off = [0, 0, 0]
                 parts.append(
-                    f"{off[0]:.4f} {off[1]:.4f} {off[2]:.4f} {r[2]:.4f} {r[1]:.4f} {r[0]:.4f}"
+                    f"{trans[0]:.4f} {trans[1]:.4f} {trans[2]:.4f} {rot[2]:.4f} {rot[1]:.4f} {rot[0]:.4f}"
                 )
             else:
-                parts.append(f"{r[2]:.4f} {r[1]:.4f} {r[0]:.4f}")
+                parts.append(f"{rot[2]:.4f} {rot[1]:.4f} {rot[0]:.4f}")
 
         lines.append(" ".join(parts))
     return lines
