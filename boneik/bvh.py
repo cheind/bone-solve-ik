@@ -32,44 +32,6 @@ def _end_joint(depth: int, intend: int) -> List[str]:
     return [f"{spaces}}}"]
 
 
-def _generate_hierarchy_old(
-    graph: SkeletonGraph, fk: torch.FloatTensor, intend: int = 4
-) -> Tuple[List[str], List[Tuple[int, int, int]]]:
-    root = graph.graph["root"]
-    lines = []
-    motion_order = []
-
-    def _traverse(u: int, parent: int, depth: int):
-        ul = graph.nodes[u]["label"]
-        succ = list(graph.successors(u))
-        is_root = parent is None
-        is_endsite = len(succ) == 0
-
-        if is_endsite:
-            off = (fk[u] - fk[parent])[:3, 3]
-            lines.extend(_begin_joint("End Site", ul, off, depth, intend))
-            lines.extend(_end_joint(depth, intend))
-        else:
-            if is_root:
-                off = fk[u][:3, 3]
-                jtype = "ROOT"
-            else:
-                off = (fk[u] - fk[parent])[:3, 3]
-                jtype = "JOINT"
-
-            for idx, n in enumerate(succ):
-                lines.extend(_begin_joint(jtype, f"{ul}.{idx:02d}", off, depth, intend))
-                motion_order.append((n, u))
-                _traverse(n, u, depth + 1)
-                lines.extend(_end_joint(depth, intend))
-
-    # motion_order.append((nroot, None))
-    _traverse(root, None, 0)
-    print(motion_order)
-
-    return lines, motion_order
-
-
 def _generate_hierarchy(
     graph: SkeletonGraph, fk: torch.FloatTensor, intend: int = 4
 ) -> Tuple[List[str], List[Tuple[int, int, int]]]:
@@ -77,7 +39,26 @@ def _generate_hierarchy(
     lines = []
     motion_order = []
 
-    # ul =
+    # Walks along the edges in dfs and creates joints along the way.
+    # For each edge, the head (not the tip) is created as joint. The
+    # offset is computed from the prev-edge source. Then all successors
+    # of the target node are traversed. Each one, will become its one
+    # joint, so that in blender a separate bone between edges that share
+    # a common source. Otherwise, we only have one bone for all and thus
+    # limited degrees of freedom. Note, for edges without successors, artificial
+    # edges are created to enable end-sites to be added to the hierarchy.
+    #
+    # Joint a
+    # {
+    #   Joint b
+    #   {
+    #       Offset x y z; vector a->b in global coordinates, defines root pose locations
+    #       Rotation; refers to how the bone starting at b is rotated wrt. to root pose in
+    #                 global coordinates (subtracting the effect of previous members of the
+    #                 hierarchy)
+    #   }
+    # }
+    #
 
     def _traverse(
         e: Tuple[int, int], eprev: Tuple[int, int], depth: int, nthchild: int
@@ -102,7 +83,7 @@ def _generate_hierarchy(
             motion_order.append(e)
             succ = list(graph.successors(v))
             if len(succ) == 0:
-                succ = [None]
+                succ = [None]  # will become an end-site
             for idx, n in enumerate(succ):
                 _traverse((v, n), e, depth + 1, idx)
         lines.extend(_end_joint(depth, intend))
