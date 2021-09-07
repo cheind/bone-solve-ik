@@ -32,7 +32,7 @@ def _end_joint(depth: int, intend: int) -> List[str]:
     return [f"{spaces}}}"]
 
 
-def _generate_hierarchy(
+def _generate_hierarchy_old(
     graph: SkeletonGraph, fk: torch.FloatTensor, intend: int = 4
 ) -> Tuple[List[str], List[Tuple[int, int, int]]]:
     root = graph.graph["root"]
@@ -42,37 +42,72 @@ def _generate_hierarchy(
     def _traverse(u: int, parent: int, depth: int):
         ul = graph.nodes[u]["label"]
         succ = list(graph.successors(u))
-        is_first = parent == root
+        is_root = parent is None
         is_endsite = len(succ) == 0
-        off = (fk[u] - fk[parent])[:3, 3]
 
         if is_endsite:
-            lines.extend(_begin_joint("End Site", ul, off, 0, depth, intend))
-        elif is_first:
-            lines.extend(_begin_joint("ROOT", ul, [0, 0, 0], 6, depth, intend))
+            off = (fk[u] - fk[parent])[:3, 3]
+            lines.extend(_begin_joint("End Site", ul, off, depth, intend))
+            lines.extend(_end_joint(depth, intend))
         else:
-            lines.extend(_begin_joint("JOINT", ul, off, 3, depth, intend))
+            if is_root:
+                off = fk[u][:3, 3]
+                jtype = "ROOT"
+            else:
+                off = (fk[u] - fk[parent])[:3, 3]
+                jtype = "JOINT"
 
-        if not is_endsite:
-            motion_order.append((u, parent))
-
-        if len(succ) == 1:
-            _traverse(succ[0], u, depth + 1)
-        elif len(succ) > 1:
             for idx, n in enumerate(succ):
-                lines.extend(
-                    _begin_joint(
-                        "JOINT", f"{ul}.{idx:02d}", [0, 0, 0], 3, depth + 1, intend
-                    )
-                )
-                _traverse(n, u, depth + 2)
-                lines.extend(_end_joint(depth + 1, intend))
-        lines.extend(_end_joint(depth, intend))
+                lines.extend(_begin_joint(jtype, f"{ul}.{idx:02d}", off, depth, intend))
+                motion_order.append((n, u))
+                _traverse(n, u, depth + 1)
+                lines.extend(_end_joint(depth, intend))
 
     # motion_order.append((nroot, None))
-    _traverse(next(graph.successors(root)), root, 0)
+    _traverse(root, None, 0)
     print(motion_order)
 
+    return lines, motion_order
+
+
+def _generate_hierarchy(
+    graph: SkeletonGraph, fk: torch.FloatTensor, intend: int = 4
+) -> Tuple[List[str], List[Tuple[int, int, int]]]:
+    root = graph.graph["root"]
+    lines = []
+    motion_order = []
+
+    # ul =
+
+    def _traverse(
+        e: Tuple[int, int], eprev: Tuple[int, int], depth: int, nthchild: int
+    ):
+        u, v = e
+        w, _ = eprev
+        ulabel = graph.nodes[u]["label"]
+        label = f"{ulabel}.{nthchild:02d}"
+
+        is_first = u == root
+        is_endsite = v is None
+
+        if is_endsite:
+            off = (fk[u] - fk[w])[:3, 3]
+            lines.extend(_begin_joint("End Site", label, off, 0, depth, intend))
+        else:
+            if is_first:
+                lines.extend(_begin_joint("ROOT", label, [0, 0, 0], 6, depth, intend))
+            else:
+                off = (fk[u] - fk[w])[:3, 3]
+                lines.extend(_begin_joint("JOINT", label, off, 3, depth, intend))
+            motion_order.append(e)
+            succ = list(graph.successors(v))
+            if len(succ) == 0:
+                succ = [None]
+            for idx, n in enumerate(succ):
+                _traverse((v, n), e, depth + 1, idx)
+        lines.extend(_end_joint(depth, intend))
+
+    _traverse(graph.graph["bfs_edges"][0], (None, root), 0, 0)
     return lines, motion_order
 
 
@@ -114,32 +149,29 @@ def _generate_motion(
     motion_order: List[Tuple[int, int, int]],
     degrees: bool = True,
 ) -> List[str]:
+    root = graph.graph["root"]
     lines = []
     for fk in poses:
         parts = []
-        for u, parent in motion_order:
-
-            tp = poses[0][parent] @ _rinv(fk[parent]) @ fk[u]
-            t = poses[0][u][:3, 3] - poses[0][parent][:3, 3]
-            p = tp[:3, 3] - poses[0][parent][:3, 3]
+        for u, v in motion_order:
+            tp = poses[0][u] @ _rinv(fk[u]) @ fk[v]
+            t = poses[0][v][:3, 3] - poses[0][u][:3, 3]
+            p = tp[:3, 3] - poses[0][u][:3, 3]
             R = _rot(t, p)
             m = torch.eye(4)
             m[:3, :3] = R
-            # t = [0, 0, 0]
-            r = T.euler_from_matrix(m, axes="sxyz")
+            r = T.euler_from_matrix(m, axes="szyx")
 
             if degrees:
                 r = np.rad2deg(r)
-            if parent == graph.graph["root"]:
-                print("root")
-                t = poses[0][parent]
+            if u == root:
                 off = [0, 0, 0]
                 parts.append(
-                    f"{off[0]:.4f} {off[1]:.4f} {off[2]:.4f} {r[0]:.4f} {r[1]:.4f} {r[2]:.4f}"
+                    f"{off[0]:.4f} {off[1]:.4f} {off[2]:.4f} {r[2]:.4f} {r[1]:.4f} {r[0]:.4f}"
                 )
             else:
-                print("otherwise")
-                parts.append(f"{r[0]:.4f} {r[1]:.4f} {r[2]:.4f}")
+                parts.append(f"{r[2]:.4f} {r[1]:.4f} {r[0]:.4f}")
+
         lines.append(" ".join(parts))
     return lines
 
