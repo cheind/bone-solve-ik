@@ -1,12 +1,9 @@
-from boneik.utils import make_dofs
-from matplotlib.pyplot import axes
-from networkx.classes.function import degree
+from boneik.draw import draw_axis
 from .kinematics import SkeletonGraph
 import torch
 import transformations as T
 from typing import List, Tuple
 import numpy as np
-import networkx as nx
 
 
 def _begin_joint(
@@ -136,9 +133,7 @@ def _generate_motion(
         parts = []
         for u, v in motion_order:
             if u == root:
-                m = fk[
-                    v
-                ]  # the method below will not work for bones of zero length, like root -> torso.
+                m = fk[v]
             else:
                 tp = poses[0][u] @ _rinv(fk[u]) @ fk[v]
                 t = poses[0][v][:3, 3] - poses[0][u][:3, 3]
@@ -163,123 +158,118 @@ def _generate_motion(
 
 
 @torch.no_grad()
-def export_bvh(
+def create_bvh(
     graph: SkeletonGraph,
     poses: List[torch.FloatTensor],
-    frame_time: float = 1.0 / 30,
+    fps: float = 30,
+    first_motion_frame: int = 0,
+    rest_frame: int = 0,
     degrees: bool = True,
-) -> List[str]:
+) -> str:
     lines = ["HIERARCHY"]
     motion_order = []
-    hlines, motion_order = _generate_hierarchy(graph, poses[0])
+    hlines, motion_order = _generate_hierarchy(graph, fk=poses[rest_frame])
     lines.extend(hlines)
     lines.append("MOTION")
     lines.append(f"Frames: {len(poses)}")
-    lines.append(f"Frame Time: {frame_time:.4f}")
-    mlines = _generate_motion(graph, poses, motion_order, degrees=degrees)
+    lines.append(f"Frame Time: {(1.0/fps):.4f}")
+    mlines = _generate_motion(
+        graph, poses[first_motion_frame:], motion_order, degrees=degrees
+    )
     lines.extend(mlines)
-    with open("test.bvh", "w") as f:
-        f.write("\n".join(lines))
+    return "\n".join(lines)
 
 
-def blender_test():
+@torch.no_grad()
+def export_bvh(
+    path: str,
+    graph: SkeletonGraph,
+    poses: List[torch.FloatTensor],
+    fps: float = 30,
+    first_motion_frame: int = 0,
+    rest_frame: int = 0,
+    degrees: bool = True,
+) -> None:
+    with open(path, "w") as f:
+        f.write(
+            create_bvh(
+                graph,
+                poses,
+                fps=fps,
+                first_motion_frame=first_motion_frame,
+                rest_frame=rest_frame,
+                degrees=degrees,
+            )
+        )
+
+
+if __name__ == "__main__":
+
     from boneik import kinematics, utils, draw
     import matplotlib.pyplot as plt
 
     g = kinematics.SkeletonGenerator()
-    g.bone("a", "b", utils.make_tuv(1.0, "x,z,-y"), **utils.make_dofs(rz=0, rx=0, ry=0))
-    g.bone("b", "c", utils.make_tuv(0.5, "x,y,z"), **utils.make_dofs(rx=0, ry=0, rz=0))
-    graph = g.create_graph(["a", "b", "c"])
+    g.bone(
+        "a",
+        "b",
+        utils.make_tuv(1.0, "x,y,z"),
+        **utils.make_dofs(rx=0.0, irx=(-90.0, 90.0)),
+    )
+    g.bone(
+        "b",
+        "c",
+        utils.make_tuv(0.5, "x,y,z"),
+        **utils.make_dofs(rx=0.0, irx=(-90.0, 90.0)),
+    )
+    g.bone(
+        "c",
+        "d",
+        utils.make_tuv(0.5, "z,-x,-y"),
+        **utils.make_dofs(rz=0.0, irz=(-90.0, 90.0)),
+    )
+    g.bone(
+        "c",
+        "e",
+        utils.make_tuv(0.5, "z,x,y"),
+        **utils.make_dofs(rz=0, irz=(-90.0, 90.0)),
+    )
+    g.bone("root", "a")  # This will hold the gobal transformation
+    graph = g.create_graph(["root", "a", "b", "c", "d", "e"])
 
-    poses = [kinematics.fk(graph)]
+    poses = [kinematics.fk(graph)]  # Rest pose
 
-    graph[0][1]["bone"].rz.set_angle(np.deg2rad(-45))
-    graph[1][2]["bone"].rx.set_angle(np.deg2rad(-45))
-    graph[1][2]["bone"].ry.set_angle(np.deg2rad(45))
-    graph[1][2]["bone"].rz.set_angle(np.deg2rad(-90))
-    poses.append(kinematics.fk(graph))
+    graph[0][1]["bone"].rx.set_angle(np.pi / 4)
+    graph[0][1]["bone"].tx.set_offset(2.0)
+    graph[3][4]["bone"].rz.set_angle(-np.pi / 2)
+    graph[3][5]["bone"].rz.set_angle(np.pi / 2)
+    poses.append(kinematics.fk(graph))  # Final pose
 
-    export_bvh(graph, poses, frame_time=2.0)
+    export_bvh("./tmp/robot.bvh", graph, poses, fps=0.5)  # forward y, up z in blender
 
-    ranges = [[-5, 5], [-5, 5], [-5, 5]]
     fig = plt.figure()
-    ax0 = draw.create_axis3d(fig, (1, 2, 1), ranges)
-    ax1 = draw.create_axis3d(fig, (1, 2, 2), ranges)
+    ax0 = draw.create_axis3d(
+        fig, pos=(1, 2, 1), axes_ranges=[[-2, 2], [-2, 2], [-2, 2]]
+    )
+    ax0.set_title("Frame 0")
+    ax1 = draw.create_axis3d(
+        fig, pos=(1, 2, 2), axes_ranges=[[-2, 2], [-2, 2], [-2, 2]]
+    )
+    ax1.set_title("Frame 1")
 
-    draw.draw(ax0, graph, fk=poses[0], draw_local_frames=True, hide_root=False)
-    draw.draw(ax1, graph, fk=poses[1], draw_local_frames=True, hide_root=False)
+    draw.draw_kinematics(
+        ax0,
+        graph,
+        fk=poses[0],
+        draw_vertex_labels=True,
+        draw_local_frames=True,
+        draw_root=True,
+    )
+    draw.draw_kinematics(
+        ax1,
+        graph,
+        fk=poses[1],
+        draw_vertex_labels=True,
+        draw_local_frames=True,
+        draw_root=True,
+    )
     plt.show()
-
-
-if __name__ == "__main__":
-    blender_test()
-    # from boneik import kinematics, utils, draw
-    # import matplotlib.pyplot as plt
-
-    # g = kinematics.SkeletonGenerator()
-    # g.bone(
-    #     "a",
-    #     "b",
-    #     utils.make_tuv(1.0, "x,y,z"),
-    #     **utils.make_dofs(rx=0.0, irx=(-90.0, 90.0)),
-    # )
-    # g.bone(
-    #     "b",
-    #     "c",
-    #     utils.make_tuv(0.5, "x,y,z"),
-    #     **utils.make_dofs(rx=0.0, irx=(-90.0, 90.0)),
-    # )
-    # g.bone(
-    #     "c",
-    #     "d",
-    #     utils.make_tuv(0.5, "z,-x,-y"),
-    #     **utils.make_dofs(rz=0.0, irz=(-90.0, 90.0)),
-    # )
-    # g.bone(
-    #     "c",
-    #     "e",
-    #     utils.make_tuv(0.5, "z,x,y"),
-    #     **utils.make_dofs(rz=0, irz=(-90.0, 90.0)),
-    # )
-    # graph = g.create_graph(["a", "b", "c", "d", "e"])
-
-    # poses = [kinematics.fk(graph)]
-
-    # fig = plt.figure(figsize=plt.figaspect(0.5))
-    # ax = fig.add_subplot(1, 1, 1, projection="3d")
-    # ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    # ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    # ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
-    # ax.set_xlim(-5.0, 5.0)
-    # ax.set_xlabel("x")
-    # ax.set_ylim(-5.0, 5.0)
-    # ax.set_ylabel("y")
-    # ax.set_zlim(-5.0, 5.0)
-    # ax.set_zlabel("z")
-    # # draw.draw(
-    # #     ax,
-    # #     graph,
-    # #     anchors=None,
-    # #     draw_vertex_labels=True,
-    # #     draw_local_frames=True,
-    # #     hide_root=False,
-    # # )
-    # # plt.show()
-
-    # graph[0][1]["bone"].rx.set_angle(np.pi / 4)
-    # graph[0][1]["bone"].tx.set_offset(2.0)
-    # graph[2][3]["bone"].rz.set_angle(-np.pi / 2)
-    # graph[2][4]["bone"].rz.set_angle(np.pi / 2)
-    # poses.append(kinematics.fk(graph))
-
-    # draw.draw(
-    #     ax,
-    #     graph,
-    #     anchors=None,
-    #     draw_vertex_labels=True,
-    #     draw_local_frames=True,
-    #     hide_root=False,
-    # )
-    # plt.show()
-
-    # export_bvh(graph, poses, frame_time=2.0)  # forward y, up z in blender

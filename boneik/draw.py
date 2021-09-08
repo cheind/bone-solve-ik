@@ -18,20 +18,20 @@ def draw_axis(ax3d, t_world: torch.Tensor, length: float = 0.5, lw: float = 1.0)
 
 
 @torch.no_grad()
-def draw(
+def draw_kinematics(
     ax3d,
     graph: kinematics.SkeletonGraph,
     fk: torch.FloatTensor = None,
     anchors: torch.Tensor = None,
     draw_local_frames: bool = True,
     draw_vertex_labels: bool = False,
-    hide_root: bool = True,
+    draw_root: bool = False,
 ):
     if fk is None:
         fk = kinematics.fk(graph)
     root = graph.graph["root"]
     for u, v in graph.graph["bfs_edges"]:
-        if u == root and hide_root:
+        if u == root and not draw_root:
             continue
         x = fk[[u, v], 0, 3].numpy()
         y = fk[[u, v], 1, 3].numpy()
@@ -39,13 +39,13 @@ def draw(
         ax3d.plot(x, y, z, lw=1, c="k", linestyle="--")
         ax3d.scatter(x[1], y[1], z[1], c="k")
     if draw_local_frames:
-        if not hide_root:
+        if draw_root:
             draw_axis(ax3d, fk[root])
         for _, v in graph.graph["bfs_edges"]:
             draw_axis(ax3d, fk[v])
     if draw_vertex_labels:
         for u, label in graph.nodes.data("label"):
-            if u == root and hide_root:
+            if u == root and not draw_root:
                 continue
             xyz = fk[u, :3, 3].numpy()
             ax3d.text(xyz[0], xyz[1], xyz[2], label, fontsize="x-small")
@@ -53,10 +53,6 @@ def draw(
     if anchors is not None:
         anchors = anchors.numpy()
         ax3d.scatter(anchors[:, 0], anchors[:, 1], anchors[:, 2], c="r", marker="o")
-        # for u, label in graph.nodes.data("label"):
-        #     ax3d.text(
-        #         anchors[u, 0], anchors[u, 1], anchors[u, 2], label, fontsize="x-small"
-        #     )
 
 
 def create_axis3d(fig, pos=(1, 1, 1), axes_ranges=None):
@@ -70,11 +66,10 @@ def create_axis3d(fig, pos=(1, 1, 1), axes_ranges=None):
         (np.ptp(axes_ranges[0]), np.ptp(axes_ranges[1]), np.ptp(axes_ranges[2]))
     )
     ax.set_xlim(*axes_ranges[0])
-    ax.set_xlim(*axes_ranges[0])
-    ax.set_xlabel("x")
     ax.set_ylim(*axes_ranges[1])
-    ax.set_ylabel("y")
     ax.set_zlim(*axes_ranges[2])
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
     ax.set_zlabel("z")
     return ax
 
