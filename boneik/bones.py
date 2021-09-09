@@ -44,7 +44,7 @@ class Bone(torch.nn.Module):
             dof.set_value(d)
 
     def get_delta(self):
-        return [dof.value for dof in self.dofs]
+        return [dof.value.detach() for dof in self.dofs]
 
     def project_(self):
         for dof in self.dofs:

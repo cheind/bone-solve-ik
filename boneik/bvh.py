@@ -1,9 +1,10 @@
-from boneik.draw import draw_axis
-from .kinematics import SkeletonGraph
 import torch
 import transformations as T
 from typing import List, Tuple
 import numpy as np
+
+
+from . import kinematics
 
 
 def _begin_joint(
@@ -30,11 +31,10 @@ def _end_joint(depth: int, intend: int) -> List[str]:
 
 
 def _generate_hierarchy(
-    graph: SkeletonGraph, fk: torch.FloatTensor, intend: int = 4
+    kinematic: kinematics.Kinematic,
+    fk: torch.FloatTensor,
+    intend: int = 4,
 ) -> Tuple[List[str], List[Tuple[int, int, int]]]:
-    root = graph.graph["root"]
-    lines = []
-    motion_order = []
 
     # Walks along the edges in dfs and creates joints along the way.
     # For each edge, the head (not the tip) is created as joint. The
@@ -56,6 +56,12 @@ def _generate_hierarchy(
     #   }
     # }
     #
+
+    lines = []
+    motion_order = []
+    root = kinematic.root
+    graph = kinematic.graph
+    bfs_edges = kinematic.bfs_edges
 
     def _traverse(
         e: Tuple[int, int], eprev: Tuple[int, int], depth: int, nthchild: int
@@ -87,7 +93,7 @@ def _generate_hierarchy(
                 _traverse((v, n), e, depth + 1, idx)
         lines.extend(_end_joint(depth, intend))
 
-    _traverse(graph.graph["bfs_edges"][0], (None, root), 0, 0)
+    _traverse(bfs_edges[0], (None, root), 0, 0)
     return lines, motion_order
 
 
@@ -124,12 +130,12 @@ def _rot(t: torch.FloatTensor, p: torch.FloatTensor) -> torch.FloatTensor:
 
 
 def _generate_motion(
-    graph: SkeletonGraph,
+    kinematic: kinematics.Kinematic,
     poses: List[torch.FloatTensor],
     motion_order: List[Tuple[int, int, int]],
     degrees: bool = True,
 ) -> List[str]:
-    root = graph.graph["root"]
+    root = kinematic.root
     lines = []
     for fk in poses:
         parts = []
@@ -161,7 +167,7 @@ def _generate_motion(
 
 @torch.no_grad()
 def create_bvh(
-    graph: SkeletonGraph,
+    kinematic: kinematics.Kinematic,
     poses: List[torch.FloatTensor],
     fps: float = 30,
     first_motion_frame: int = 0,
@@ -170,13 +176,13 @@ def create_bvh(
 ) -> str:
     lines = ["HIERARCHY"]
     motion_order = []
-    hlines, motion_order = _generate_hierarchy(graph, fk=poses[rest_frame])
+    hlines, motion_order = _generate_hierarchy(kinematic, fk=poses[rest_frame])
     lines.extend(hlines)
     lines.append("MOTION")
     lines.append(f"Frames: {len(poses)}")
     lines.append(f"Frame Time: {(1.0/fps):.4f}")
     mlines = _generate_motion(
-        graph, poses[first_motion_frame:], motion_order, degrees=degrees
+        kinematic, poses[first_motion_frame:], motion_order, degrees=degrees
     )
     lines.extend(mlines)
     return "\n".join(lines)
@@ -184,8 +190,9 @@ def create_bvh(
 
 @torch.no_grad()
 def export_bvh(
+    *,
     path: str,
-    graph: SkeletonGraph,
+    kinematic: kinematics.Kinematic,
     poses: List[torch.FloatTensor],
     fps: float = 30,
     first_motion_frame: int = 0,
@@ -195,7 +202,7 @@ def export_bvh(
     with open(path, "w") as f:
         f.write(
             create_bvh(
-                graph,
+                kinematic,
                 poses,
                 fps=fps,
                 first_motion_frame=first_motion_frame,
@@ -207,46 +214,47 @@ def export_bvh(
 
 if __name__ == "__main__":
 
-    from boneik import kinematics, utils, draw
+    from boneik import kinematics, draw
+    from boneik.utils import make_tip_to_base
     import matplotlib.pyplot as plt
 
-    g = kinematics.SkeletonGenerator()
-    g.bone(
+    b = kinematics.KinematicBuilder()
+    b.add_bone(
         "a",
         "b",
-        utils.make_tuv(1.0, "x,y,z"),
-        **utils.make_dofs(rx=0.0, irx=(-90.0, 90.0)),
+        tip_to_base=make_tip_to_base(1.0, "x,y,z"),
+        dofs={"rx": np.deg2rad([-90, 90])},
     )
-    g.bone(
+    b.add_bone(
         "b",
         "c",
-        utils.make_tuv(0.5, "x,y,z"),
-        **utils.make_dofs(rx=0.0, irx=(-90.0, 90.0)),
+        tip_to_base=make_tip_to_base(0.5, "x,y,z"),
+        dofs={"rx": np.deg2rad([-90, 90])},
     )
-    g.bone(
+    b.add_bone(
         "c",
         "d",
-        utils.make_tuv(0.5, "z,-x,-y"),
-        **utils.make_dofs(rz=0.0, irz=(-90.0, 90.0)),
+        tip_to_base=make_tip_to_base(0.5, "z,-x,-y"),
+        dofs={"rz": np.deg2rad([-90, 90])},
     )
-    g.bone(
+    b.add_bone(
         "c",
         "e",
-        utils.make_tuv(0.5, "z,x,y"),
-        **utils.make_dofs(rz=0, irz=(-90.0, 90.0)),
+        tip_to_base=make_tip_to_base(0.5, "z,x,y"),
+        dofs={"rz": np.deg2rad([-90, 90])},
     )
-    g.bone("root", "a")  # This will hold the gobal transformation
-    graph = g.create_graph(["root", "a", "b", "c", "d", "e"])
+    b.add_bone("root", "a")
+    k = b.finalize(["root", "a", "b", "c", "d", "e"])
 
-    poses = [kinematics.fk(graph)]  # Rest pose
+    poses = [k.fk()]  # Rest pose
 
-    graph[0][1]["bone"].rx.set_angle(np.pi / 4)
-    graph[0][1]["bone"].tx.set_offset(2.0)
-    graph[3][4]["bone"].rz.set_angle(-np.pi / 2)
-    graph[3][5]["bone"].rz.set_angle(np.pi / 2)
-    poses.append(kinematics.fk(graph))  # Final pose
+    k["root", "a"].set_delta([np.pi / 4, 0, 0, 2.0, 0, 0])
+    k["c", "d"].set_delta([0, 0, -np.pi / 2, 0, 0, 0])
+    k["c", "e"].set_delta([0, 0, np.pi / 2, 0, 0, 0])
 
-    export_bvh("./tmp/robot.bvh", graph, poses, fps=0.5)  # forward y, up z in blender
+    poses.append(k.fk())  # Final pose
+
+    export_bvh("./tmp/robot.bvh", k, poses, fps=0.5)  # forward y, up z in blender
 
     fig = plt.figure()
     ax0 = draw.create_axis3d(
@@ -260,7 +268,7 @@ if __name__ == "__main__":
 
     draw.draw_kinematics(
         ax0,
-        graph,
+        kinematic=k,
         fk=poses[0],
         draw_vertex_labels=True,
         draw_local_frames=True,
@@ -268,7 +276,7 @@ if __name__ == "__main__":
     )
     draw.draw_kinematics(
         ax1,
-        graph,
+        kinematic=k,
         fk=poses[1],
         draw_vertex_labels=True,
         draw_local_frames=True,

@@ -94,7 +94,7 @@ class BaseTransDOF(torch.nn.Module):
 
     @property
     def value(self) -> torch.FloatTensor:
-        return self.offset.data
+        return self.offset
 
     def set_value(self, offset: float):
         self.offset.data.fill_(offset)
