@@ -78,7 +78,9 @@ def _generate_hierarchy(
                 off = (fk[u] - fk[w])[:3, 3]
                 lines.extend(_begin_joint("JOINT", label, off, 3, depth, intend))
             motion_order.append(e)
-            succ = list(graph.successors(v))
+            # Note the sorted. Otherwise we might generate bones with different
+            # name suffixes
+            succ = sorted(list(graph.successors(v)))
             if len(succ) == 0:
                 succ = [None]  # will become an end-site
             for idx, n in enumerate(succ):
