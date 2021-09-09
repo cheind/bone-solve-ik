@@ -10,34 +10,31 @@ class BaseRotDOF(torch.nn.Module):
     def __init__(
         self,
         *,
-        angle: float = 0.0,
+        value: float = 0.0,
         interval: Tuple[float, float] = None,
         unlocked: bool = True,
     ):
         super().__init__()
         self.reparam = ConstrainedAngleReparametrization(interval)
         self.uangle = Parameter(
-            self.reparam.angle2log(angle).float(), requires_grad=unlocked
+            self.reparam.angle2log(value).float(), requires_grad=unlocked
         )
         self._reset_value = self.uangle.data.clone()
 
     @property
-    def angle(self):
+    def value(self):
         return self.reparam.log2angle(self.uangle)
 
     def matrix(self) -> torch.Tensor:
         raise NotImplementedError
 
-    @torch.no_grad()
     def project_(self):
         self.reparam.project_inplace(self.uangle)
 
-    @torch.no_grad()
     def reset_(self):
         self.uangle.data[:] = self._reset_value
 
-    @torch.no_grad()
-    def set_angle(self, angle: float):
+    def set_value(self, angle: float):
         self.uangle.data[:] = self.reparam.angle2log(angle).float()
 
 
@@ -78,11 +75,12 @@ class BaseTransDOF(torch.nn.Module):
     def __init__(
         self,
         *,
-        offset: float = 0.0,
+        value: float = 0.0,
+        interval: Tuple[float, float] = None,
         unlocked: bool = True,
     ):
         super().__init__()
-        self.offset = Parameter(torch.tensor(offset).float(), requires_grad=unlocked)
+        self.offset = Parameter(torch.tensor(value).float(), requires_grad=unlocked)
         self._reset_value = self.offset.data.clone()
 
     def matrix(self) -> torch.Tensor:
@@ -91,8 +89,14 @@ class BaseTransDOF(torch.nn.Module):
     def reset_(self):
         self.offset.data.fill_(self._reset_value)
 
-    @torch.no_grad()
-    def set_offset(self, offset: float):
+    def project_(self):
+        pass
+
+    @property
+    def value(self) -> torch.FloatTensor:
+        return self.offset.data
+
+    def set_value(self, offset: float):
         self.offset.data.fill_(offset)
 
 
@@ -115,3 +119,7 @@ class TransZ(BaseTransDOF):
         m = torch.eye(4)
         m[2, 3] = self.offset
         return m
+
+
+DOF_NAMES = ["rx", "ry", "rz", "tx", "ty", "tz"]
+DOF_CLASSES = [RotX, RotY, RotZ, TransX, TransY, TransZ]

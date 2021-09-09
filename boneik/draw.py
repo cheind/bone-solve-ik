@@ -20,7 +20,8 @@ def draw_axis(ax3d, t_world: torch.Tensor, length: float = 0.5, lw: float = 1.0)
 @torch.no_grad()
 def draw_kinematics(
     ax3d,
-    graph: kinematics.SkeletonGraph,
+    *,
+    kinematic: kinematics.Kinematic,
     fk: torch.FloatTensor = None,
     anchors: torch.Tensor = None,
     draw_local_frames: bool = True,
@@ -28,9 +29,9 @@ def draw_kinematics(
     draw_root: bool = False,
 ):
     if fk is None:
-        fk = kinematics.fk(graph)
-    root = graph.graph["root"]
-    for u, v in graph.graph["bfs_edges"]:
+        fk = kinematic.fk()
+    root = kinematic.root
+    for u, v in kinematic.bfs_edges:
         if u == root and not draw_root:
             continue
         x = fk[[u, v], 0, 3].numpy()
@@ -41,10 +42,10 @@ def draw_kinematics(
     if draw_local_frames:
         if draw_root:
             draw_axis(ax3d, fk[root])
-        for _, v in graph.graph["bfs_edges"]:
+        for _, v in kinematic.bfs_edges:
             draw_axis(ax3d, fk[v])
     if draw_vertex_labels:
-        for u, label in graph.nodes.data("label"):
+        for u, label in kinematic.graph.nodes.data("label"):
             if u == root and not draw_root:
                 continue
             xyz = fk[u, :3, 3].numpy()
