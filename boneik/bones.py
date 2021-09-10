@@ -12,14 +12,12 @@ DofSet = Set[str]
 
 
 class Bone(torch.nn.Module):
-    def __init__(
-        self, tip_to_base: torch.FloatTensor, dof_dict: Dict[str, RangeConstraint]
-    ) -> None:
+    def __init__(self, tip_to_base: torch.FloatTensor, dof_dict: DofDict) -> None:
         super().__init__()
         self.tip_to_base = torch.as_tensor(tip_to_base).float()
         self._create_dofs(dof_dict or {})
 
-    def _create_dofs(self, dof_dict: Dict[str, RangeConstraint]):
+    def _create_dofs(self, dof_dict: DofDict):
         def _create(klass: Type, name: str, dof_dict):
             if name in dof_dict:
                 the_dof = klass(value=0.0, interval=dof_dict[name], unlocked=True)
