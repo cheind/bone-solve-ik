@@ -73,6 +73,21 @@ class Bone(torch.nn.Module):
     def get_delta(self):
         return [dof.value for dof in self.dofs]
 
+    def sample(self, nsamples: int = 1) -> torch.FloatTensor:
+        """Sample Nx6 delta values."""
+
+        def _sample_once():
+            return [
+                self.rx.sample(),
+                self.ry.sample(),
+                self.rz.sample(),
+                self.tx.sample(),
+                self.ty.sample(),
+                self.tz.sample(),
+            ]
+
+        return torch.as_tensor([_sample_once() for _ in range(nsamples)]).view(-1, 6)
+
     def project_(self):
         for dof in self.dofs:
             dof.project_()

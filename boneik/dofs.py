@@ -25,7 +25,13 @@ class BaseRotDOF(torch.nn.Module):
     def value(self):
         return self.reparam.log2angle(self.uangle)
 
-    def matrix(self) -> torch.Tensor:
+    def sample(self) -> torch.FloatTensor:
+        if self.uangle.requires_grad:
+            return self.reparam.log2angle(torch.rand(2) * 4 - 2)  # [-2;2]
+        else:
+            return self.value
+
+    def matrix(self) -> torch.FloatTensor:
         raise NotImplementedError
 
     def project_(self):
@@ -83,8 +89,14 @@ class BaseTransDOF(torch.nn.Module):
         self.offset = Parameter(torch.tensor(value).float(), requires_grad=unlocked)
         self._reset_value = self.offset.data.clone()
 
-    def matrix(self) -> torch.Tensor:
+    def matrix(self) -> torch.FloatTensor:
         raise NotImplementedError
+
+    def sample(self) -> torch.FloatTensor:
+        if self.offset.requires_grad:
+            return torch.rand() * 10 - 5  # [-5;5]
+        else:
+            return self.value
 
     def reset_(self):
         self.offset.data.fill_(self._reset_value)

@@ -40,6 +40,20 @@ class Body:
             bone: bones.Bone
             bone.reset_()
 
+    def sample(self, nsamples: int = 1) -> torch.FloatTensor:
+        """Returns SxBx6 array of uniform samples for bones in bfs order."""
+        samples = []
+        for u, v in self.bfs_edges:
+            bone: bones.Bone = self.graph[u][v]["bone"]
+            samples.append(bone.sample(nsamples))
+        return torch.stack(samples, 1)
+
+    def set_delta(self, deltae: torch.FloatTensor):
+        """Sets delta values Bx6 for each bone in bfs order."""
+        for (u, v), d in zip(self.bfs_edges, deltae):
+            bone: bones.Bone = self.graph[u][v]["bone"]
+            bone.set_delta(d)
+
     def __str__(self):
         parts = []
         max_node_width = 0
