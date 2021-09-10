@@ -12,6 +12,22 @@ DofSet = Set[str]
 
 
 class Bone(torch.nn.Module):
+    """Describes the geometric relationship between two joints.
+
+    The bone is conceptionally an edge between two vertices (base, tip) of the
+    kinematic graph. It stores the how the tip frame is rotated/translated wrt.
+    the base. The transformation consists of an initial transformation followed
+    by a delta transformation. While the initial transformation remains fixed
+    throughout the optimization, the delta transformation offers up to 6DOF.
+    Each DOF can be unlocked for optimization and constrained to a specific
+    interval. Currently, only rotations support angle constraints.
+
+    There will be a bone instance for every connected pair of joints (vertices)
+    in the kinematic graph (see kinematics.Body). We store the bone as attribute
+    of the edge connecting these joints. This allows several bones to be
+    represented starting from a common joint.
+    """
+
     def __init__(self, tip_to_base: torch.FloatTensor, dof_dict: DofDict) -> None:
         super().__init__()
         self.tip_to_base = torch.as_tensor(tip_to_base).float()
