@@ -3,15 +3,15 @@ import torch
 
 from . import kinematics
 
-Criterium = Callable[[kinematics.Kinematic], torch.FloatTensor]
+Criterium = Callable[[kinematics.Body], torch.FloatTensor]
 
 
 def euclidean_distance_loss(
-    kinematic: kinematics.Kinematic,
+    body: kinematics.Body,
     anchors: torch.FloatTensor,
     weights: torch.FloatTensor,
 ) -> torch.FloatTensor:
-    fkt = kinematic.fk()
+    fkt = body.fk()
     loss = (
         torch.square(anchors - fkt[:, :3, 3]).sum(-1) * weights
     ).sum() / weights.sum()
@@ -27,5 +27,5 @@ class EuclideanDistanceCriterium:
             weights = anchors.new_ones(len(anchors))
         self.weights = weights
 
-    def __call__(self, kinematic: kinematics.Kinematic) -> torch.FloatTensor:
-        return euclidean_distance_loss(kinematic, self.anchors, self.weights)
+    def __call__(self, body: kinematics.Body) -> torch.FloatTensor:
+        return euclidean_distance_loss(body, self.anchors, self.weights)

@@ -31,7 +31,7 @@ def _end_joint(depth: int, intend: int) -> List[str]:
 
 
 def _generate_hierarchy(
-    kinematic: kinematics.Kinematic,
+    body: kinematics.Body,
     fk: torch.FloatTensor,
     intend: int = 4,
 ) -> Tuple[List[str], List[Tuple[int, int, int]]]:
@@ -59,9 +59,9 @@ def _generate_hierarchy(
 
     lines = []
     motion_order = []
-    root = kinematic.root
-    graph = kinematic.graph
-    bfs_edges = kinematic.bfs_edges
+    root = body.root
+    graph = body.graph
+    bfs_edges = body.bfs_edges
 
     def _traverse(
         e: Tuple[int, int], eprev: Tuple[int, int], depth: int, nthchild: int
@@ -130,12 +130,12 @@ def _rot(t: torch.FloatTensor, p: torch.FloatTensor) -> torch.FloatTensor:
 
 
 def _generate_motion(
-    kinematic: kinematics.Kinematic,
+    body: kinematics.Body,
     poses: List[torch.FloatTensor],
     motion_order: List[Tuple[int, int, int]],
     degrees: bool = True,
 ) -> List[str]:
-    root = kinematic.root
+    root = body.root
     lines = []
     for fk in poses:
         parts = []
@@ -167,7 +167,7 @@ def _generate_motion(
 
 @torch.no_grad()
 def create_bvh(
-    kinematic: kinematics.Kinematic,
+    body: kinematics.Body,
     poses: List[torch.FloatTensor],
     fps: float = 30,
     first_motion_frame: int = 0,
@@ -176,13 +176,13 @@ def create_bvh(
 ) -> str:
     lines = ["HIERARCHY"]
     motion_order = []
-    hlines, motion_order = _generate_hierarchy(kinematic, fk=poses[rest_frame])
+    hlines, motion_order = _generate_hierarchy(body, fk=poses[rest_frame])
     lines.extend(hlines)
     lines.append("MOTION")
     lines.append(f"Frames: {len(poses)}")
     lines.append(f"Frame Time: {(1.0/fps):.4f}")
     mlines = _generate_motion(
-        kinematic, poses[first_motion_frame:], motion_order, degrees=degrees
+        body, poses[first_motion_frame:], motion_order, degrees=degrees
     )
     lines.extend(mlines)
     return "\n".join(lines)
@@ -192,17 +192,18 @@ def create_bvh(
 def export_bvh(
     *,
     path: str,
-    kinematic: kinematics.Kinematic,
+    body: kinematics.Body,
     poses: List[torch.FloatTensor],
     fps: float = 30,
     first_motion_frame: int = 0,
     rest_frame: int = 0,
     degrees: bool = True,
 ) -> None:
+    """Exports the kinematic and motion """
     with open(path, "w") as f:
         f.write(
             create_bvh(
-                kinematic,
+                body,
                 poses,
                 fps=fps,
                 first_motion_frame=first_motion_frame,
@@ -218,7 +219,7 @@ if __name__ == "__main__":
     from boneik.utils import make_tip_to_base
     import matplotlib.pyplot as plt
 
-    b = kinematics.KinematicBuilder()
+    b = kinematics.BodyBuilder()
     b.add_bone(
         "a",
         "b",
@@ -244,17 +245,19 @@ if __name__ == "__main__":
         dofs={"rz": np.deg2rad([-90, 90])},
     )
     b.add_bone("root", "a")
-    k = b.finalize(["root", "a", "b", "c", "d", "e"])
+    body = b.finalize(["root", "a", "b", "c", "d", "e"])
 
-    poses = [k.fk()]  # Rest pose
+    poses = [body.fk()]  # Rest pose
 
-    k["root", "a"].set_delta([np.pi / 4, 0, 0, 2.0, 0, 0])
-    k["c", "d"].set_delta([0, 0, -np.pi / 2, 0, 0, 0])
-    k["c", "e"].set_delta([0, 0, np.pi / 2, 0, 0, 0])
+    body["root", "a"].set_delta([np.pi / 4, 0, 0, 2.0, 0, 0])
+    body["c", "d"].set_delta([0, 0, -np.pi / 2, 0, 0, 0])
+    body["c", "e"].set_delta([0, 0, np.pi / 2, 0, 0, 0])
 
-    poses.append(k.fk())  # Final pose
+    poses.append(body.fk())  # Final pose
 
-    export_bvh("./tmp/robot.bvh", k, poses, fps=0.5)  # forward y, up z in blender
+    export_bvh(
+        path="./tmp/robot.bvh", body=body, poses=poses, fps=0.5
+    )  # forward y, up z in blender
 
     fig = plt.figure()
     ax0 = draw.create_axis3d(
@@ -268,7 +271,7 @@ if __name__ == "__main__":
 
     draw.draw_kinematics(
         ax0,
-        kinematic=k,
+        body=body,
         fk=poses[0],
         draw_vertex_labels=True,
         draw_local_frames=True,
@@ -276,7 +279,7 @@ if __name__ == "__main__":
     )
     draw.draw_kinematics(
         ax1,
-        kinematic=k,
+        body=body,
         fk=poses[1],
         draw_vertex_labels=True,
         draw_local_frames=True,

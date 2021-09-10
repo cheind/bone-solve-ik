@@ -11,7 +11,7 @@ from boneik import bvh
 
 
 def main():
-    b = kinematics.KinematicBuilder()
+    b = kinematics.BodyBuilder()
     b.add_bone(
         "torso",
         "chest",
@@ -105,7 +105,7 @@ def main():
         dofs={"rx", "ry", "rz", "tx", "ty", "tz"},
     )
 
-    kinematic = b.finalize(
+    body = b.finalize(
         [
             "head",
             "neck",
@@ -127,32 +127,32 @@ def main():
         ]
     )
 
-    N = kinematic.graph.number_of_nodes()
+    N = body.graph.number_of_nodes()
     frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
 
-    poses = [kinematic.fk()]  # important to start from rest-pose for bvh export.
+    poses = [body.fk()]  # important to start from rest-pose for bvh export.
 
-    solver = solvers.IKSolver(kinematic)
+    solver = solvers.IKSolver(body)
     crit = criteria.EuclideanDistanceCriterium(torch.zeros((N, 3)), torch.ones(N))
     crit.weights[-1] = 0  # root joint does not have any anchor.
 
     axes_ranges = [[-20, 20], [-20, 20], [-2, 5]]
     fig, ax = draw.create_figure3d(axes_ranges=axes_ranges)
 
-    prev_pose = kinematic.fk()
-    for i in tqdm(range(0, len(frame_data), 5)):
+    prev_pose = body.fk()
+    for i in tqdm(range(0, 200, 5)):
         crit.anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
         torso = crit.anchors[-3].clone()
         crit.anchors[: N - 1] -= torso  # torso at 0/0/0
         loss = solver.solve(crit, history_size=10, max_iter=10)
         if loss > 0.3:
             # retry from rest-pose
-            kinematic.reset_()
+            body.reset_()
             loss = solver.solve(crit)
         if loss < 0.3:
             # print("+", end="")
-            delta = kinematic["root", "torso"].get_delta()
-            kinematic["root", "torso"].set_delta(
+            delta = body["root", "torso"].get_delta()
+            body["root", "torso"].set_delta(
                 [
                     delta[0],
                     delta[1],
@@ -162,11 +162,11 @@ def main():
                     delta[5] + torso[2],
                 ]
             )
-            new_pose = kinematic.fk()
+            new_pose = body.fk()
             poses.append(new_pose)
             prev_pose = new_pose
         else:
-            kinematic.reset_()
+            body.reset_()
             poses.append(prev_pose)  # Do not skip any frames, unhandled by BVH
         crit.anchors[: N - 1] += torso
         ax.cla()
@@ -175,8 +175,8 @@ def main():
         ax.set_zlim(*axes_ranges[2])
         draw.draw_kinematics(
             ax,
-            kinematic=kinematic,
-            fk=kinematic.fk(),
+            body=body,
+            fk=body.fk(),
             anchors=crit.anchors,
             draw_vertex_labels=False,
             draw_local_frames=False,
@@ -186,7 +186,7 @@ def main():
         plt.show(block=False)
         plt.pause(0.01)
 
-    bvh.export_bvh(path="tmp/human.bvh", kinematic=kinematic, poses=poses, fps=1 / 3.0)
+    bvh.export_bvh(path="tmp/human.bvh", body=body, poses=poses, fps=1 / 3.0)
 
 
 def makefile():

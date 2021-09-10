@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Tuple, List, Set
+from typing import Dict, Optional, Tuple, List, Set, Union, Type
 
 import torch
 import torch.nn
@@ -20,31 +20,44 @@ class Bone(torch.nn.Module):
         self._create_dofs(dof_dict or {})
 
     def _create_dofs(self, dof_dict: Dict[str, RangeConstraint]):
-        the_dofs = []
-        for name, klass in zip(dofs.DOF_NAMES, dofs.DOF_CLASSES):
+        def _create(klass: Type, name: str, dof_dict):
             if name in dof_dict:
-                the_dofs.append(
-                    klass(value=0.0, interval=dof_dict[name], unlocked=True)
-                )
+                the_dof = klass(value=0.0, interval=dof_dict[name], unlocked=True)
             else:
-                the_dofs.append(klass(value=0.0, interval=None, unlocked=False))
-        self.dofs = torch.nn.ModuleList(the_dofs)
+                the_dof = klass(value=0.0, interval=None, unlocked=False)
+            return the_dof
+
+        self.rx = _create(dofs.RotX, "rx", dof_dict)
+        self.ry = _create(dofs.RotY, "ry", dof_dict)
+        self.rz = _create(dofs.RotZ, "rz", dof_dict)
+        self.tx = _create(dofs.TransX, "tx", dof_dict)
+        self.ty = _create(dofs.TransY, "ty", dof_dict)
+        self.tz = _create(dofs.TransZ, "tz", dof_dict)
+        self.dofs = [self.rx, self.ry, self.rz, self.tx, self.ty, self.tz]
 
     def matrix(self) -> torch.FloatTensor:
         return self.delta_matrix() @ self.tip_to_base
 
     def delta_matrix(self) -> torch.FloatTensor:
-        d = torch.eye(4)
-        for dof in self.dofs:
-            d = dof.matrix() @ d
-        return d
+        return (
+            self.tx.matrix()
+            @ self.ty.matrix()
+            @ self.tz.matrix()
+            @ self.rx.matrix()
+            @ self.ry.matrix()
+            @ self.rz.matrix()
+        )
 
-    def set_delta(self, ds: List[float]):
-        for d, dof in zip(ds, self.dofs):
-            dof.set_value(d)
+    def set_delta(self, ds: Union[List[float], torch.FloatTensor]):
+        self.rx.set_value(ds[0])
+        self.ry.set_value(ds[1])
+        self.rz.set_value(ds[2])
+        self.tx.set_value(ds[3])
+        self.ty.set_value(ds[4])
+        self.tz.set_value(ds[5])
 
     def get_delta(self):
-        return [dof.value.detach() for dof in self.dofs]
+        return [dof.value for dof in self.dofs]
 
     def project_(self):
         for dof in self.dofs:

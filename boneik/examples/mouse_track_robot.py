@@ -6,10 +6,10 @@ from boneik import kinematics, solvers, criteria
 from boneik.reparametrizations import PI
 
 
-def draw(ax, k: kinematics.Kinematic):
+def draw(ax, body: kinematics.Body):
     with torch.no_grad():
-        fk = k.fk()
-        for u, v in k.bfs_edges:
+        fk = body.fk()
+        for u, v in body.bfs_edges:
             tu = fk[u][:2, 3].numpy()
             tv = fk[v][:2, 3].numpy()
             ax.plot([tu[0], tv[0]], [tu[1], tv[1]], c="green")
@@ -20,7 +20,7 @@ def draw(ax, k: kinematics.Kinematic):
 
 
 def main():
-    b = kinematics.KinematicBuilder()
+    b = kinematics.BodyBuilder()
     b.add_bone(
         0,
         1,
@@ -42,9 +42,9 @@ def main():
         tip_to_base=T.translation_matrix([0, 0.5, 0]),
         dofs={"rz": (-PI / 2, PI / 2)},
     )
-    k = b.finalize()
-    N = k.graph.number_of_nodes()
-    solver = solvers.IKSolver(k)
+    body = b.finalize()
+    N = body.graph.number_of_nodes()
+    solver = solvers.IKSolver(body)
     fig, ax = plt.subplots()
 
     anchors = torch.zeros(N, 3)
@@ -61,13 +61,13 @@ def main():
             crit, min_abs_change=0.01, history_size=5, max_iter=5, lr=1e-1
         )
         if loss > 1.0:
-            k.reset_()
+            body.reset_()
             solver.solve(crit, lr=1e-1)
         ax.cla()
-        draw(event.inaxes, k)
+        draw(event.inaxes, body)
         fig.canvas.draw_idle()
 
-    draw(ax, k)
+    draw(ax, body)
     fig.canvas.mpl_connect("motion_notify_event", on_move)
     plt.show()
 

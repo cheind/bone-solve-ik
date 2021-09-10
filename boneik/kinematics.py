@@ -8,13 +8,12 @@ from . import bones
 
 Vertex = Any
 Edge = Tuple[Vertex, Vertex]
-KinematicGraph = nx.DiGraph
 VertexTensorDict = Dict[Vertex, torch.Tensor]
 
 
-class Kinematic:
+class Body:
     def __init__(
-        self, graph: KinematicGraph, root: Vertex, node_mapping: Dict[Vertex, int]
+        self, graph: nx.DiGraph, root: Vertex, node_mapping: Dict[Vertex, int]
     ) -> None:
         self.graph = graph
         self.root = root
@@ -59,7 +58,7 @@ class Kinematic:
         return self.graph[self.node_mapping[u]][self.node_mapping[v]]["bone"]
 
 
-class KinematicBuilder:
+class BodyBuilder:
     def __init__(self) -> None:
         self.graph = nx.DiGraph()
 
@@ -70,7 +69,7 @@ class KinematicBuilder:
         *,
         tip_to_base: torch.FloatTensor = None,
         dofs: Union[bones.DofDict, bones.DofSet] = None,
-    ) -> "KinematicBuilder":
+    ) -> "BodyBuilder":
         if tip_to_base is None:
             tip_to_base = torch.eye(4)
         if isinstance(dofs, set):
@@ -78,7 +77,7 @@ class KinematicBuilder:
         self.graph.add_edge(u, v, bone=bones.Bone(tip_to_base, dof_dict=dofs))
         return self
 
-    def finalize(self, relabel_order: List[Vertex] = None) -> Kinematic:
+    def finalize(self, relabel_order: List[Vertex] = None) -> Body:
         """Returns the final kinematic graph with nodes relabled in range [0,N)."""
         N = self.graph.number_of_nodes()
         if relabel_order is None:
@@ -92,7 +91,7 @@ class KinematicBuilder:
         if len(roots) > 1:
             raise ValueError("More than one skeleton root.")
 
-        return Kinematic(self.graph, roots[0], node_mapping)
+        return Body(self.graph, roots[0], node_mapping)
 
 
 if __name__ == "__main__":
@@ -101,7 +100,7 @@ if __name__ == "__main__":
     from .utils import make_tip_to_base
     from . import draw
 
-    b = KinematicBuilder()
+    b = BodyBuilder()
     b.add_bone(
         "a",
         "b",
@@ -127,14 +126,14 @@ if __name__ == "__main__":
         dofs={"rz": np.deg2rad([-90, 90])},
     )
     b.add_bone("root", "a")
-    k = b.finalize(["root", "a", "b", "c", "d", "e"])
+    body = b.finalize(["root", "a", "b", "c", "d", "e"])
 
-    poses = [k.fk()]
+    poses = [body.fk()]
 
-    k["root", "a"].set_delta([np.pi / 4, 0, 0, 2.0, 0, 0])
-    k["c", "d"].set_delta([0, 0, -np.pi / 2, 0, 0, 0])
-    k["c", "e"].set_delta([0, 0, -np.pi / 2, 0, 0, 0])
-    poses.append(k.fk())
+    body["root", "a"].set_delta([np.pi / 4, 0, 0, 2.0, 0, 0])
+    body["c", "d"].set_delta([0, 0, -np.pi / 2, 0, 0, 0])
+    body["c", "e"].set_delta([0, 0, -np.pi / 2, 0, 0, 0])
+    poses.append(body.fk())
 
     fig = plt.figure()
     ax0 = draw.create_axis3d(
@@ -142,7 +141,7 @@ if __name__ == "__main__":
     )
     draw.draw_kinematics(
         ax0,
-        kinematic=k,
+        body=body,
         fk=poses[0],
         draw_vertex_labels=True,
         draw_local_frames=True,
@@ -150,7 +149,7 @@ if __name__ == "__main__":
     )
     draw.draw_kinematics(
         ax0,
-        kinematic=k,
+        body=body,
         fk=poses[1],
         draw_vertex_labels=True,
         draw_local_frames=True,
