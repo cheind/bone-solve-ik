@@ -7,7 +7,7 @@ from boneik import kinematics, solvers, utils, draw, criteria
 from boneik import bvh
 
 
-def main():
+def create_body() -> kinematics.Body:
     b = kinematics.BodyBuilder()
     b.add_bone(
         "torso",
@@ -99,7 +99,8 @@ def main():
         "root",
         "torso",
         tip_to_base=torch.eye(4),
-        dofs={"rx", "ry", "rz", "tx", "ty", "tz"},
+        # dofs={"rx", "ry", "rz", "tx", "ty", "tz"},
+        dofs={"rx", "ry", "rz"},
     )
 
     body = b.finalize(
@@ -124,39 +125,75 @@ def main():
         ]
     )
 
+    return body
+
+
+def main():
+    import argparse
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input", type=Path, help="Pickled 3D joint predictions (NxMx3)")
+    parser.add_argument("-input-fps", type=int, default=30, help="Input FPS")
+    parser.add_argument("-input-step", type=int, default=1, help="Fit every nth frame")
+    parser.add_argument(
+        "-scale", type=float, help="Scale anchors of first frame to this"
+    )
+    parser.add_argument(
+        "-max-loss", type=float, default=0.3, help="max loss to accept in fitting"
+    )
+    parser.add_argument(
+        "-crit",
+        type=str,
+        choices=["euclidean", "parallel"],
+        default="parallel",
+        help="Loss criterium to apply",
+    )
+    parser.add_argument("-output", type=Path, default=Path("./tmp/human.bvh"))
+    parser.add_argument("-show", type=int, default=1, help="visualize every nth frame")
+
+    args = parser.parse_args()
+    assert args.input.is_file()
+
+    body = create_body()
     N = body.graph.number_of_nodes()
-    frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames2.pkl", "rb"))
+    frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames_raw.pkl", "rb"))
+    if args.scale is not None:
+        scale_factor = utils.find_scale_factor(frame_data[0]) * args.scale
+    else:
+        scale_factor = 1.0
 
     poses = [body.fk()]  # important to start from rest-pose for bvh export.
 
     solver = solvers.IKSolver(body)
-    crit = criteria.EuclideanDistanceCriterium(torch.zeros((N, 3)), torch.ones(N))
-    crit.weights[-1] = 0  # root joint does not have any anchor.
+    if args.crit == "parallel":
+        crit = criteria.ParallelSegmentCriterium(torch.zeros((N, 3)), torch.ones(N))
+    else:
+        crit = criteria.EuclideanDistanceCriterium(torch.zeros((N, 3)), torch.ones(N))
+    crit.weights[-1] = 0  # root joint never has a corresponding anchor.
 
     axes_ranges = [[-20, 20], [-20, 20], [-2, 5]]
     fig, ax = draw.create_figure3d(axes_ranges=axes_ranges)
-
     prev_pose = body.fk()
-    for i in tqdm(range(0, len(frame_data), 5)):
-        crit.anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
+    for i in tqdm(range(0, 500, args.input_step)):
+        crit.anchors[: N - 1] = torch.from_numpy(frame_data[i]).float() * scale_factor
         torso = crit.anchors[-3].clone()
         crit.anchors[: N - 1] -= torso  # torso at 0/0/0
         loss = solver.solve(crit, history_size=10, max_iter=10)
-        if loss > 0.3:
+        if loss > args.max_loss:
             # retry from rest-pose
             body.reset_()
             loss = solver.solve(crit)
-        if loss < 0.3:
-            # print("+", end="")
+        if loss < args.max_loss:
             delta = body["root", "torso"].get_delta()
             body["root", "torso"].set_delta(
                 [
                     delta[0],
                     delta[1],
                     delta[2],
-                    delta[3] + torso[0],
-                    delta[4] + torso[1],
-                    delta[5] + torso[2],
+                    torso[0],
+                    torso[1],
+                    torso[2],
                 ]
             )
             new_pose = body.fk()
@@ -166,34 +203,27 @@ def main():
             body.reset_()
             poses.append(prev_pose)  # Do not skip any frames, unhandled by BVH
         crit.anchors[: N - 1] += torso
-        ax.cla()
-        ax.set_xlim(*axes_ranges[0])
-        ax.set_ylim(*axes_ranges[1])
-        ax.set_zlim(*axes_ranges[2])
-        draw.draw_kinematics(
-            ax,
-            body=body,
-            fk=body.fk(),
-            anchors=crit.anchors,
-            draw_vertex_labels=False,
-            draw_local_frames=False,
-            draw_root=False,
-        )
-        # fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
-        plt.show(block=False)
-        plt.pause(0.01)
+        if (i // args.input_step) % args.show == 0:
+            ax.cla()
+            ax.set_xlim(*axes_ranges[0])
+            ax.set_ylim(*axes_ranges[1])
+            ax.set_zlim(*axes_ranges[2])
+            draw.draw_kinematics(
+                ax,
+                body=body,
+                fk=body.fk(),
+                anchors=crit.anchors,
+                draw_vertex_labels=False,
+                draw_local_frames=False,
+                draw_root=False,
+            )
+            # fig.savefig(f"tmp/{i:05d}.png", bbox_inches="tight")
+            plt.show(block=False)
+            plt.pause(0.01)
 
-    bvh.export_bvh(path="tmp/human.bvh", body=body, poses=poses, fps=1 / 3.0)
-
-
-def makefile():
-    # ffmpeg -f concat -i tmp\concat.txt -vf "crop=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -pix_fmt yuv420p skel.mp4
-    from glob import glob
-    from pathlib import Path
-
-    files = sorted(glob("tmp/*.png"))
-    with open("tmp/concat.txt", "w") as f:
-        f.writelines([f"file {Path(f).name}\nduration 0.25\n" for f in files])
+    bvh.export_bvh(
+        path=args.output, body=body, poses=poses, fps=(args.input_fps / args.input_step)
+    )
 
 
 if __name__ == "__main__":
