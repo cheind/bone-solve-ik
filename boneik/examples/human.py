@@ -1,7 +1,4 @@
-from boneik.dofs import RotX
-from boneik.reparametrizations import PI
 import matplotlib.pyplot as plt
-import transformations as T
 import numpy as np
 import torch
 import pickle
@@ -128,7 +125,7 @@ def main():
     )
 
     N = body.graph.number_of_nodes()
-    frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames.pkl", "rb"))
+    frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames2.pkl", "rb"))
 
     poses = [body.fk()]  # important to start from rest-pose for bvh export.
 
@@ -140,7 +137,7 @@ def main():
     fig, ax = draw.create_figure3d(axes_ranges=axes_ranges)
 
     prev_pose = body.fk()
-    for i in tqdm(range(0, 200, 5)):
+    for i in tqdm(range(0, len(frame_data), 5)):
         crit.anchors[: N - 1] = torch.from_numpy(frame_data[i]).float()
         torso = crit.anchors[-3].clone()
         crit.anchors[: N - 1] -= torso  # torso at 0/0/0
