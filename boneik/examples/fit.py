@@ -3,11 +3,11 @@ import numpy as np
 import torch
 import pickle
 from tqdm import tqdm
-from boneik import kinematics, solvers, utils, draw, criteria
+from boneik import kinematics, solvers, utils, draw, criteria, io
 from boneik import bvh
 
 
-def create_body() -> kinematics.Body:
+def create_human_body() -> kinematics.Body:
     b = kinematics.BodyBuilder()
     b.add_bone(
         "torso",
@@ -134,6 +134,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=Path, help="Pickled 3D joint predictions (NxMx3)")
+    parser.add_argument("-body", type=Path, help="Kinematic description file")
     parser.add_argument("-input-fps", type=int, default=30, help="Input FPS")
     parser.add_argument("-input-step", type=int, default=1, help="Fit every nth frame")
     parser.add_argument(
@@ -155,7 +156,11 @@ def main():
     args = parser.parse_args()
     assert args.input.is_file()
 
-    body = create_body()
+    if args.body is not None:
+        assert args.body.is_file()
+        body = io.load_json(args.body)
+    else:
+        body = create_human_body()
     N = body.graph.number_of_nodes()
     frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames_raw.pkl", "rb"))
     if args.scale is not None:
@@ -175,7 +180,7 @@ def main():
     axes_ranges = [[-20, 20], [-20, 20], [-2, 5]]
     fig, ax = draw.create_figure3d(axes_ranges=axes_ranges)
     prev_pose = body.fk()
-    for i in tqdm(range(0, 500, args.input_step)):
+    for i in tqdm(range(0, len(frame_data), args.input_step)):
         crit.anchors[: N - 1] = torch.from_numpy(frame_data[i]).float() * scale_factor
         torso = crit.anchors[-3].clone()
         crit.anchors[: N - 1] -= torso  # torso at 0/0/0

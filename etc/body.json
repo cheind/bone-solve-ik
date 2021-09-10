@@ -1,0 +1,162 @@
+{
+    "bones": [
+        {
+            "u": "torso",
+            "v": "chest",
+            "length": 1.17965,
+            "axes": "-x,z,y",
+            "dofs": {
+                "rx": [-10,90]
+            }
+        },
+        {
+            "u": "chest",
+            "v": "neck",
+            "length": 2.0279,
+            "axes": "x,y,z",
+            "dofs": {
+                "ry": [-90,90]
+            }
+        },
+        {
+            "u": "neck",
+            "v": "head",
+            "length": 0.73577,
+            "axes": "-x,y,-z"
+        },
+        {
+            "u": "neck",
+            "v": "shoulder.L",
+            "length": 0.71612,
+            "axes":  "-z,-x,y"
+        },
+        {
+            "u": "shoulder.L",
+            "v": "elbow.L",
+            "length": 1.8189,
+            "axes": "x,y,z",
+            "dofs": {
+                "rx": [-90,30],
+                "ry": [-90,90],
+                "rz": [-90,90]
+            }
+        },
+        {
+            "u": "elbow.L",
+            "v": "hand.L",
+            "length": 1.1908,
+            "axes": "x,y,z",
+            "dofs": {
+                "rz": [-135,0]
+            }
+        },
+        {
+            "u": "neck",
+            "v": "shoulder.R",
+            "length": 0.71612,
+            "axes":  "z,x,y"
+        },
+        {
+            "u": "shoulder.R",
+            "v": "elbow.R",
+            "length": 1.8189,
+            "axes": "x,y,z",
+            "dofs": {
+                "rx": [-90,30],
+                "ry": [-90,90],
+                "rz": [-90,90]
+            }
+        },
+        {
+            "u": "elbow.R",
+            "v": "hand.R",
+            "length": 1.1908,
+            "axes": "x,y,z",
+            "dofs": {
+                "rz": [0,135]
+            }
+        },
+        {
+            "u": "torso",
+            "v": "hip.L",
+            "length": 1.1542,
+            "axes": "-y,x,z"        
+        },
+        {
+            "u": "hip.L",
+            "v": "knee.L",
+            "length": 2.2245,
+            "axes": "x,-z,y",
+            "dofs": {
+                "rx": [-20,20],
+                "ry": [-90,90],
+                "rz": [-20,20]
+            }
+        },
+        {
+            "u": "knee.L",
+            "v": "foot.L",
+            "length": 1.7149,
+            "axes": "x,y,z",
+            "dofs": {
+                "rz": [0,90]
+            }
+        },
+        {
+            "u": "torso",
+            "v": "hip.R",
+            "length": 1.1542,
+            "axes": "y,-x,z"        
+        },
+        {
+            "u": "hip.R",
+            "v": "knee.R",
+            "length": 2.2245,
+            "axes": "x,-z,y",
+            "dofs": {
+                "rx": [-20,20],
+                "ry": [-90,90],
+                "rz": [-20,20]
+            }
+        },
+        {
+            "u": "knee.R",
+            "v": "foot.R",
+            "length": 1.7149,
+            "axes": "x,y,z",
+            "dofs": {
+                "rz": [-90,0]
+            }
+        },
+        {
+            "u": "root",
+            "v": "torso",
+            "length": 0,
+            "axes": "x,y,z",
+            "dofs": {
+                "rx": null,
+                "ry": null,
+                "rz": null
+            }
+        }
+    ],
+    "order": [
+        "head",
+        "neck",
+        "shoulder.R",
+        "elbow.R",
+        "hand.R",
+        "shoulder.L",
+        "elbow.L",
+        "hand.L",
+        "hip.R",
+        "knee.R",
+        "foot.R",
+        "hip.L",
+        "knee.L",
+        "foot.L",
+        "torso",
+        "chest",
+        "root"
+    ]
+}
