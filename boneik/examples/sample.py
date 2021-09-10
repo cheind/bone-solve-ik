@@ -1,10 +1,5 @@
 import matplotlib.pyplot as plt
-import numpy as np
-import torch
-import pickle
-from tqdm import tqdm
-from boneik import kinematics, solvers, utils, draw, criteria, io
-from boneik import bvh
+from boneik import draw, io
 
 
 def main():
