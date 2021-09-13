@@ -41,7 +41,7 @@ def test_rodrigues_multidim():
 
 def test_exp_map():
     # unconstrained
-    c, cinv = R.range_constraints([None])
+    c, _ = R.affine_constraint_transformations(torch.tensor([[-R.PI, R.PI]]))
     angles = torch.deg2rad(torch.tensor([90]))
     z = torch.stack((torch.cos(angles), torch.sin(angles)), -1)
     axes = torch.tensor([[1.0, 0, 0]])
@@ -49,7 +49,7 @@ def test_exp_map():
     assert torch.allclose(rot[0], torch.tensor([[1.0, 0, 0], [0, 0, 1], [0, -1, 0]]).T)
 
     # constrained
-    c, cinv = R.range_constraints([(-np.pi / 4, np.pi / 4)])
+    c, _ = R.affine_constraint_transformations(torch.tensor([(-np.pi / 4, np.pi / 4)]))
 
     z = torch.tensor([[-1.0, -1.0], [0.0, 0.0], [-1.0, 1.0]]) * 10
     axes = torch.tensor([[1.0, 0, 0], [1.0, 0, 0], [1.0, 0, 0]])
@@ -63,7 +63,9 @@ def test_exp_map():
     )  # note, sign in rot-axis
 
     # constrained, rotated
-    c, cinv = R.range_constraints([(-np.pi / 4 + np.pi, np.pi / 4 + np.pi)])
+    c, _ = R.affine_constraint_transformations(
+        torch.tensor([(-np.pi / 4 + np.pi, np.pi / 4 + np.pi)])
+    )
 
     z = torch.tensor([[-1.0, -1.0], [0.0, 0.0], [-1.0, 1.0]]) * 10
     axes = torch.tensor([[1.0, 0, 0], [1.0, 0, 0], [1.0, 0, 0]])
@@ -77,7 +79,9 @@ def test_exp_map():
     )  # note, sign in rot-axis
 
     # two different constraints
-    c, cinv = R.range_constraints([None, (-np.pi / 4, np.pi / 4)])
+    c, _ = R.affine_constraint_transformations(
+        torch.tensor([(-R.PI, R.PI), (-np.pi / 4, np.pi / 4)])
+    )
     z = torch.tensor([[-1.0, -1.0], [-1.0, -1.0]]) * 10
     axes = torch.tensor([[1.0, 0, 0], [1.0, 0, 0]])
     rot = R.exp_map(z, axes, c)
@@ -88,20 +92,24 @@ def test_exp_map():
 
 
 def test_exp_map_angle():
-    c, _ = R.range_constraints([(-np.pi / 4, np.pi / 4)])
+    c, _ = R.affine_constraint_transformations(torch.tensor([(-np.pi / 4, np.pi / 4)]))
     z = torch.tensor([[-1.0, -1.0], [0.0, 0.0], [-1.0, 1.0]]) * 10
     assert torch.allclose(
         R.exp_map_angle(z, c), torch.tensor([-np.pi / 4, 0, np.pi / 4])
     )
 
-    c, cinv = R.range_constraints([(-np.pi / 4 + np.pi, np.pi / 4 + np.pi)])
+    c, _ = R.affine_constraint_transformations(
+        torch.tensor([(-np.pi / 4 + np.pi, np.pi / 4 + np.pi)])
+    )
     z = torch.tensor([[-1.0, -1.0], [0.0, 0.0], [-1.0, 1.0]]) * 10
     assert torch.allclose(
         R.exp_map_angle(z, c),
         torch.tensor([3 / 4 * np.pi, np.pi, -np.pi + np.pi / 4]),
     )
 
-    c, cinv = R.range_constraints([None, (-np.pi / 4, np.pi / 4)])
+    c, _ = R.affine_constraint_transformations(
+        torch.tensor([(-R.PI, R.PI), (-np.pi / 4, np.pi / 4)])
+    )
     z = torch.tensor([[-1.0, -1.0], [-1.0, -1.0]]) * 10
     assert torch.allclose(
         R.exp_map_angle(z, c),

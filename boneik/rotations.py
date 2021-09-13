@@ -1,10 +1,11 @@
 from typing import Tuple, Optional, List
 import torch
+from torch._C import device, dtype
 import torch.nn.functional as F
 import numpy as np
 
 PI = torch.tensor(np.pi).float()
-NO_CONSTRAINT = torch.tensor([-PI, PI]).float()
+UNCONSTRAINED_RANGE = torch.tensor([-PI, PI]).float()
 
 
 def _affine(r: torch.FloatTensor) -> torch.FloatTensor:
@@ -17,15 +18,15 @@ def _affine(r: torch.FloatTensor) -> torch.FloatTensor:
         assert length <= PI, "Constrained interval must be <= PI or exactly 2PI"
 
         theta = length / 2
-        scale = torch.eye(3)
+        scale = torch.eye(3, dtype=r.dtype, device=r.device)
         scale[0, 0] = (1 - torch.cos(theta)) / 2
         scale[1, 1] = torch.sin(theta)
 
-        trans = torch.eye(3)
+        trans = torch.eye(3, dtype=r.dtype, device=r.device)
         trans[0, 2] = -(-1) * scale[0, 0] + torch.cos(theta)
         trans[1, 2] = -(-1) * scale[1, 1] + -torch.sin(theta)
 
-        rot = torch.eye(3)
+        rot = torch.eye(3, dtype=r.dtype, device=r.device)
         theta_diff = r[0] - (-theta)
         rot[0, 0] = torch.cos(theta_diff)
         rot[1, 1] = torch.cos(theta_diff)
@@ -36,23 +37,24 @@ def _affine(r: torch.FloatTensor) -> torch.FloatTensor:
         return aff, torch.inverse(aff)
 
 
-def range_constraints(
-    open_ranges: List[Optional[Tuple[float, float]]],
+def affine_constraint_transformations(
+    open_ranges: torch.FloatTensor,
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
     """Returns forward inverse affine transformations associated with given range constraints.
 
+    Params
+    ------
+    open_ranges: (N,2) tensor
+        Open range boundaries for N angles
+
     Returns
     -------
-    affines: Nx3x3 tensor
-    inverses: Nx3x3 tensor
+    affines: (N,3,3) tensor
+    inverses: (N,3,3) tensor
 
     """
     forwards, invs = [], []
     for r in open_ranges:
-        if r is None:
-            r = NO_CONSTRAINT
-        else:
-            r = torch.tensor(r).float()
         f, i = _affine(r)
         forwards.append(f)
         invs.append(i)
