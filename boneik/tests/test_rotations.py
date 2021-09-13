@@ -85,3 +85,25 @@ def test_exp_map():
     phi_cos = (rot_trace - 1.0) * 0.5
     rot_angles = torch.acos(phi_cos)
     assert torch.allclose(rot_angles, torch.tensor([3 * np.pi / 4, np.pi / 4]))
+
+
+def test_exp_map_angle():
+    c, _ = R.range_constraints([(-np.pi / 4, np.pi / 4)])
+    z = torch.tensor([[-1.0, -1.0], [0.0, 0.0], [-1.0, 1.0]]) * 10
+    assert torch.allclose(
+        R.exp_map_angle(z, c), torch.tensor([-np.pi / 4, 0, np.pi / 4])
+    )
+
+    c, cinv = R.range_constraints([(-np.pi / 4 + np.pi, np.pi / 4 + np.pi)])
+    z = torch.tensor([[-1.0, -1.0], [0.0, 0.0], [-1.0, 1.0]]) * 10
+    assert torch.allclose(
+        R.exp_map_angle(z, c),
+        torch.tensor([3 / 4 * np.pi, np.pi, -np.pi + np.pi / 4]),
+    )
+
+    c, cinv = R.range_constraints([None, (-np.pi / 4, np.pi / 4)])
+    z = torch.tensor([[-1.0, -1.0], [-1.0, -1.0]]) * 10
+    assert torch.allclose(
+        R.exp_map_angle(z, c),
+        torch.tensor([-3 / 4 * np.pi, -np.pi / 4]),
+    )
