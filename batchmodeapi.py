@@ -28,7 +28,17 @@ body = ...
 motion = body.motion_data()
 
 motion.body_world
-motion.uconstrained_rotations  # (N*3, 2)
+motion.urotation  # (N*3, 2) where N = number of bones, for locked urotation=(100,0) and affine=eye
+motion.urotation_initial  # (N*3, 2) where N = number of bones, for locked urotation=(100,0) and affine=eye
+motion.utranslations  # 3
+motion.unlocked_dof_mask  # N
+
+urot = (
+    motion.unlocked_dof_mask * motion.urotation
+    + (1 - motion.unlocked_dof_mask) * motion.urotation_initial
+)
+
+
 motion.reset()
 motion.get_parameters()
 motion.set_rotation("a", "b", [rx, ry, rz])
