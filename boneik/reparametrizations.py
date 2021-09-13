@@ -44,7 +44,7 @@ class ConstrainedAngleReparametrization:
             theta = self.length / 2
             scale = torch.eye(3)
             scale[0, 0] = (1 - np.cos(theta)) / 2
-            scale[1, 1] = (self.length) / 2
+            scale[1, 1] = np.sin(theta)
 
             trans = torch.eye(3)
             trans[0, 2] = -(-1) * scale[0, 0] + np.cos(theta)
