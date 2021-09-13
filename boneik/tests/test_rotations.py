@@ -45,7 +45,7 @@ def test_exp_map():
     angles = torch.deg2rad(torch.tensor([90]))
     z = torch.stack((torch.cos(angles), torch.sin(angles)), -1)
     axes = torch.tensor([[1.0, 0, 0]])
-    rot = R.exp_map(z, axes, c)
+    rot = R.exp_map(z, axes, c)  # Note, c is broadcasted for each of the elements.
     assert torch.allclose(rot[0], torch.tensor([[1.0, 0, 0], [0, 0, 1], [0, -1, 0]]).T)
 
     # constrained
@@ -75,3 +75,13 @@ def test_exp_map():
     assert torch.allclose(
         torch.tensor([-np.pi / 4 + np.pi, np.pi, np.pi - np.pi / 4]), rot_angles
     )  # note, sign in rot-axis
+
+    # two different constraints
+    c, cinv = R.range_constraints([None, (-np.pi / 4, np.pi / 4)])
+    z = torch.tensor([[-1.0, -1.0], [-1.0, -1.0]]) * 10
+    axes = torch.tensor([[1.0, 0, 0], [1.0, 0, 0]])
+    rot = R.exp_map(z, axes, c)
+    rot_trace = rot[..., 0, 0] + rot[..., 1, 1] + rot[..., 2, 2]
+    phi_cos = (rot_trace - 1.0) * 0.5
+    rot_angles = torch.acos(phi_cos)
+    assert torch.allclose(rot_angles, torch.tensor([3 * np.pi / 4, np.pi / 4]))
