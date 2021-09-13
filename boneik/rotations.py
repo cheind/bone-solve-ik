@@ -114,5 +114,5 @@ def exp_map(
     z = torch.matmul(constraints, z.unsqueeze(-1)).squeeze(-1)
     # Complex on unit-circle
     z = F.normalize(z[..., :2], dim=-1)
-    # Convert to rotation matrices
+    # Exponential map to rotation matrix
     return rodrigues(z, axes)
