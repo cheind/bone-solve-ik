@@ -122,6 +122,7 @@ def exp_map(
 def exp_map_angle(
     uz: torch.FloatTensor, constraints: torch.FloatTensor
 ) -> torch.FloatTensor:
+    """Convertes unconstrained 2D reals to angle."""
     z = _exp_map(uz, constraints)
     return torch.atan2(z[..., 1], z[..., 0])
 
@@ -140,16 +141,43 @@ def _exp_map(
     return z
 
 
-# def clamp_angle(
-#     self, theta: torch.FloatTensor, r: List[Optional[OpenRange]]
-# ) -> torch.FloatTensor:
-#     """Clamps angles to nearest on open interval."""
-#     theta = torch.as_tensor(theta).float()
-#     eps = torch.finfo(theta.dtype).eps
+def clamp_angle(
+    theta: torch.FloatTensor, open_ranges: torch.FloatTensor
+) -> torch.FloatTensor:
+    """Clamps angles to nearest in open interval."""
+    N = theta.shape[0]
+    eps = torch.finfo(theta.dtype).eps
 
-#     if self.is_constrained and (theta <= self.i[0] or theta >= self.i[1]):
-#         # Limit to open interval
+    return torch.clamp(
+        theta,
+        open_ranges[..., 0].view(N) + 2 * eps,
+        open_ranges[..., 1].view(N) - 2 * eps,
+    )
 
-#         theta = torch.clamp(theta, self.i[0] + 2 * eps, self.i[1] - 2 * eps)
-#     z = torch.tensor([torch.cos(theta), torch.sin(theta)])
-#     return self.log(z)
+
+def project_(uz: torch.FloatTensor) -> None:
+    """Inplace clamping of unconstrained angles to be close to unit box.
+    Done to avoid gradients where tanh is close to zero in optimization."""
+    uz.data.clamp_(-3.0, 3.0)
+    # Actually never allows uangle to be in arange for which tanh(z) = +/- 1
+    # avoiding vanishing gradients. Also means, that interval is open-range on
+    # both sides. The more relaxed the clamping, the closer values to the
+    # interval we can attain.
+
+
+def log_map_angle(
+    theta: torch.FloatTensor,
+    inv_constraints: torch.FloatTensor,
+) -> torch.FloatTensor:
+    """Converts angles to unconstrained 2D real space."""
+    z = torch.stack([torch.cos(theta), torch.sin(theta)], -1)
+    return log_map(z, inv_constraints)
+
+
+def log_map(
+    z: torch.FloatTensor, inv_constraints: torch.FloatTensor
+) -> torch.FloatTensor:
+    z = F.pad(z, (0, 1), "constant", 1)
+    z = torch.matmul(inv_constraints, z.unsqueeze(-1)).squeeze(-1)
+    zu = torch.atanh(z[..., :2])
+    return zu

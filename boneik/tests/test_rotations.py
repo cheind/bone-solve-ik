@@ -115,3 +115,38 @@ def test_exp_map_angle():
         R.exp_map_angle(z, c),
         torch.tensor([-3 / 4 * np.pi, -np.pi / 4]),
     )
+
+
+def test_clamp_angle():
+    theta = torch.tensor([-0.6, 0.2, 0.3, 0.5, 0.1])
+    r = torch.tensor([[-0.3, 0.3], [-0.5, 0.1], [0.0, 0.5], [0.0, 0.1], [0.0, 0.1]])
+    thetac = R.clamp_angle(theta, r)
+    assert torch.allclose(thetac, torch.tensor([-0.3, 0.1, 0.3, 0.1, 0.1]))
+
+
+def test_project():
+    uz = torch.tensor([[0.7, -0.7]]) * 10
+    uz.requires_grad_(True)
+    R.project_(uz)
+    theta = R.exp_map_angle(uz, torch.eye(3).view(1, 3, 3))
+    theta.sum().backward()
+    assert abs(uz.grad[0, 0]) > 1e-3
+    assert abs(uz.grad[0, 1]) > 1e-3
+
+
+def test_log_map_angle():
+    theta = torch.tensor([0.0, R.PI / 4, -R.PI / 4])
+    r = torch.tensor([(-R.PI, R.PI), (-R.PI, R.PI), (-R.PI, R.PI)])
+    theta = R.clamp_angle(theta, r)
+    c, cinv = R.affine_constraint_transformations(r)
+    uz = R.log_map_angle(theta, cinv)
+    thetar = R.exp_map_angle(uz, c)
+    assert torch.allclose(theta, thetar)
+
+    theta = torch.tensor([0.0, R.PI / 4, -R.PI / 4])
+    r = torch.tensor([(0.0, R.PI), (-R.PI / 2, R.PI / 2), (-R.PI / 2, R.PI / 2)])
+    thetac = R.clamp_angle(theta, r)
+    c, cinv = R.affine_constraint_transformations(r)
+    uz = R.log_map_angle(thetac, cinv)
+    thetar = R.exp_map_angle(uz, c)
+    assert torch.allclose(theta, thetar, atol=1e-4)
