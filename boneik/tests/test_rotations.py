@@ -8,34 +8,14 @@ def test_rodrigues():
     angles = torch.deg2rad(torch.tensor([0, 90, 180]))
     z = torch.stack((torch.cos(angles), torch.sin(angles)), -1)
     axes = torch.eye(3)
-    rot = R.rodrigues(z, axes)
+    rot = R.rodrigues(z.view(1, 3, 2), axes)
 
-    assert torch.allclose(rot[0], torch.eye(3))
-    assert torch.allclose(
-        rot[1], torch.tensor([[0, 0, -1], [0, 1.0, 0], [1, 0, 0]]).T, atol=1e-3
-    )
-    assert torch.allclose(
-        rot[2], torch.tensor([[-1, 0, 0], [0, -1.0, 0], [0, 0, 1]]).T, atol=1e-3
-    )
-
-
-def test_rodrigues_multidim():
-    angles = torch.deg2rad(torch.tensor([0, 90, 180, 270]))
-    z = torch.stack((torch.cos(angles), torch.sin(angles)), -1)
-    axes = torch.tensor(
-        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]
-    )
-    rot = R.rodrigues(z.view(4, 1, 2), axes.view(4, 1, 3))
-    assert rot.shape == (4, 1, 3, 3)
     assert torch.allclose(rot[0, 0], torch.eye(3))
     assert torch.allclose(
-        rot[1, 0], torch.tensor([[0, 0, -1], [0, 1.0, 0], [1, 0, 0]]).T, atol=1e-3
+        rot[0, 1], torch.tensor([[0, 0, -1], [0, 1.0, 0], [1, 0, 0]]).T, atol=1e-3
     )
     assert torch.allclose(
-        rot[2, 0], torch.tensor([[-1, 0, 0], [0, -1.0, 0], [0, 0, 1]]).T, atol=1e-3
-    )
-    assert torch.allclose(
-        rot[3, 0], torch.tensor([[0, -1, 0], [1.0, 0, 0], [0, 0, 1]]).T, atol=1e-3
+        rot[0, 2], torch.tensor([[-1, 0, 0], [0, -1.0, 0], [0, 0, 1]]).T, atol=1e-3
     )
 
 
@@ -118,10 +98,10 @@ def test_exp_map_angle():
 
 
 def test_clamp_angle():
-    theta = torch.tensor([-0.6, 0.2, 0.3, 0.5, 0.1])
+    theta = torch.tensor([-0.6, 0.2, 0.3, 0.5, 0.1]).unsqueeze(0)
     r = torch.tensor([[-0.3, 0.3], [-0.5, 0.1], [0.0, 0.5], [0.0, 0.1], [0.0, 0.1]])
     thetac = R.clamp_angle(theta, r)
-    assert torch.allclose(thetac, torch.tensor([-0.3, 0.1, 0.3, 0.1, 0.1]))
+    assert torch.allclose(thetac, torch.tensor([-0.3, 0.1, 0.3, 0.1, 0.1]).unsqueeze(0))
 
 
 def test_project():
@@ -135,7 +115,7 @@ def test_project():
 
 
 def test_log_map_angle():
-    theta = torch.tensor([0.0, R.PI / 4, -R.PI / 4])
+    theta = torch.tensor([0.0, R.PI / 4, -R.PI / 4]).unsqueeze(0)
     r = torch.tensor([(-R.PI, R.PI), (-R.PI, R.PI), (-R.PI, R.PI)])
     theta = R.clamp_angle(theta, r)
     c, cinv = R.affine_constraint_transformations(r)
@@ -143,7 +123,7 @@ def test_log_map_angle():
     thetar = R.exp_map_angle(uz, c)
     assert torch.allclose(theta, thetar)
 
-    theta = torch.tensor([0.0, R.PI / 4, -R.PI / 4])
+    theta = torch.tensor([0.0, R.PI / 4, -R.PI / 4]).unsqueeze(0)
     r = torch.tensor([(0.0, R.PI), (-R.PI / 2, R.PI / 2), (-R.PI / 2, R.PI / 2)])
     thetac = R.clamp_angle(theta, r)
     c, cinv = R.affine_constraint_transformations(r)

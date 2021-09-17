@@ -81,6 +81,7 @@ class ConstrainedAngleReparametrization:
             eps = torch.finfo(theta.dtype).eps
             theta = torch.clamp(theta, self.i[0] + 2 * eps, self.i[1] - 2 * eps)
         z = torch.tensor([torch.cos(theta), torch.sin(theta)])
+        print(z)
         return self.log(z)
 
     def log2angle(self, z: torch.Tensor) -> torch.Tensor:
@@ -93,3 +94,8 @@ class ConstrainedAngleReparametrization:
         )  # Actually never allows uangle to be in arange for which tanh(z) = +/- 1
         # avoiding vanishing gradients. Also means, that interval is open-range on
         # both sides.
+
+
+if __name__ == "__main__":
+    r = ConstrainedAngleReparametrization()
+    print(r.exp(r.angle2log(torch.tensor(0.0))))

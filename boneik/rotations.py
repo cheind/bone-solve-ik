@@ -8,8 +8,9 @@ PI = torch.tensor(np.pi).float()
 UNCONSTRAINED_RANGE = torch.tensor([-PI, PI]).float()
 
 
-def _affine(r: torch.FloatTensor) -> torch.FloatTensor:
+def affine_constraint(r: torch.FloatTensor) -> torch.FloatTensor:
     """Returns the affine transformation used to constrain an angle to an open interval."""
+    r = torch.as_tensor(r).float()
     length = r[1] - r[0]
     assert length > 0, "Upper limit must be greater than lower limit"
     if abs(length - 2 * PI) < 1e-6:
@@ -55,56 +56,66 @@ def affine_constraint_transformations(
     """
     forwards, invs = [], []
     for r in open_ranges:
-        f, i = _affine(r)
+        f, i = affine_constraint(r)
         forwards.append(f)
         invs.append(i)
     return torch.stack(forwards, 0), torch.stack(invs, 0)
 
 
-def skew(axes: torch.FloatTensor) -> torch.FloatTensor:
-    """Compute the skew-symmetric matrices corresponding to the vector cross product."""
+def skew(v: torch.FloatTensor) -> torch.FloatTensor:
+    """Convert vectors to cross product matrices..
 
-    PRE, D = axes.shape[:-1], axes.shape[-1]
-    assert D == 3
+    Params
+    ------
+    v: (N,3) tensor
+        vectors
 
-    s = axes.new_zeros(PRE + (3, 3))
-    x, y, z = axes.unbind(-1)
+    Returns
+    -------
+    s: (N,3,3) tensor
+        Corresponding cross product matrices.
+    """
 
-    s[..., 0, 1] = -z
-    s[..., 0, 2] = y
-    s[..., 1, 0] = z
-    s[..., 1, 2] = -x
-    s[..., 2, 0] = -y
-    s[..., 2, 1] = x
+    N, C = v.shape
+    assert C == 3
+
+    s = v.new_zeros((N,) + (3, 3))
+    x, y, z = v.unbind(-1)
+
+    s[:, 0, 1] = -z
+    s[:, 0, 2] = y
+    s[:, 1, 0] = z
+    s[:, 1, 2] = -x
+    s[:, 2, 0] = -y
+    s[:, 2, 1] = x
 
     return s
 
 
 def rodrigues(z: torch.FloatTensor, axes: torch.FloatTensor) -> torch.FloatTensor:
-    """Computes rotation matrices from angles and axes.
+    """Batch convert angle parametrization to rotation matrices.
 
     Params
     ------
-    z: (*,2) tensor
+    z: (B,N,2) tensor
         Unit-length vectors interpreted as complex numbers cos(theta) +isin(theta)
-    axes: (*,3) tensor
+    axes: (N,3) tensor
         Unit-length rotation axes.
 
     Returns
     -------
-    rot: (*,3,3) tensor
+    rot: (B,N,3,3) tensor
         Rotation matrices
     """
-    PRE = z.shape[:-1]
-    assert PRE == axes.shape[:-1]
-    assert z.shape[-1] == 2
-    assert axes.shape[-1] == 3
+    B, N, C = z.shape
+    assert C == 2
+    assert axes.shape == (N, 3)
 
     cos_theta = z[..., 0]
     sin_theta = z[..., 1]
     C = skew(axes)
     CC = torch.matmul(C, C)
-    eye = torch.eye(3, device=z.device, dtype=z.dtype)[(None,) * len(PRE)]
+    eye = torch.eye(3, device=z.device, dtype=z.dtype).view(1, 1, 3, 3)
 
     return eye + sin_theta[..., None, None] * C + (1 - cos_theta[..., None, None]) * CC
 
@@ -130,12 +141,27 @@ def exp_map_angle(
 def _exp_map(
     uz: torch.FloatTensor, constraints: torch.FloatTensor
 ) -> torch.FloatTensor:
-    """Maps unconstrained 2D reals to constrainted space on unit circle"""
+    """Maps unconstrained 2D reals to constrainted space on unit circle
+
+    Params
+    -------
+    uz: (B,N,2) tensor
+        Batch angle parametrizations
+    constraints: (N,3,3) tensor
+        Affine angle range constraints
+
+    Returns
+    -------
+    z: (B,N,2) tensor
+        Affine transformed angle reparametrizations, normalized
+        interpretable as z[i,j] = cos(theta) + i sin(theta)
+    """
     # Unit box
     z = torch.tanh(uz)
-    z = F.pad(z, (0, 1), "constant", 1)
+    z = F.pad(z, (0, 1), "constant", 1).unsqueeze(-1)  # (B,N,3,1)
     # Apply constraint
-    z = torch.matmul(constraints, z.unsqueeze(-1)).squeeze(-1)
+
+    z = torch.matmul(constraints.unsqueeze(0), z).squeeze(-1)
     # Complex on unit-circle
     z = F.normalize(z[..., :2], dim=-1)
     return z
@@ -145,13 +171,13 @@ def clamp_angle(
     theta: torch.FloatTensor, open_ranges: torch.FloatTensor
 ) -> torch.FloatTensor:
     """Clamps angles to nearest in open interval."""
-    N = theta.shape[0]
+    B, N = theta.shape
     eps = torch.finfo(theta.dtype).eps
 
     return torch.clamp(
         theta,
-        open_ranges[..., 0].view(N) + 2 * eps,
-        open_ranges[..., 1].view(N) - 2 * eps,
+        open_ranges[:, 0] + 2 * eps,
+        open_ranges[:, 1] - 2 * eps,
     )
 
 
@@ -177,7 +203,7 @@ def log_map_angle(
 def log_map(
     z: torch.FloatTensor, inv_constraints: torch.FloatTensor
 ) -> torch.FloatTensor:
-    z = F.pad(z, (0, 1), "constant", 1)
-    z = torch.matmul(inv_constraints, z.unsqueeze(-1)).squeeze(-1)
+    z = F.pad(z, (0, 1), "constant", 1).unsqueeze(-1)  # (B,N,3,1)
+    z = torch.matmul(inv_constraints.unsqueeze(0), z).squeeze(-1)
     zu = torch.atanh(z[..., :2])
     return zu
