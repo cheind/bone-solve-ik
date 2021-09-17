@@ -85,7 +85,7 @@ class BodyKinematics(torch.nn.Module):
         self.register_buffer("rot_axes", torch.stack(rot_axes, 0))
         self.register_buffer("tip_to_base", torch.stack(tip_to_base, 0))
 
-    def rest_pose(self):
+    def log_angles_rest_pose(self):
         N = self.rot_constraints.shape[0]
         dev = self.rot_axes.device
         dtype = self.rot_axes.dtype
@@ -94,6 +94,30 @@ class BodyKinematics(torch.nn.Module):
             R.clamp_angle(theta, self.rot_open_ranges),
             self.rot_inv_constraints,
         )
+
+    def fk(self, log_angles: torch.FloatTensor) -> torch.FloatTensor:
+        rots = R.exp_map(log_angles, self.rot_axes, self.rot_constraints)
+        B = log_angles.shape[0]  # number of samples
+        N = self.body.graph.number_of_nodes()
+
+        fkt = [None] * N
+        e = torch.eye(4, device=log_angles.device, dtype=log_angles.dtype)
+        e = e.reshape((1, 4, 4))
+        e = e.repeat((B, 1, 1))
+        fkt[self.body.root] = e
+
+        for idx, (u, v) in enumerate(self.body.bfs_edges):
+            rx, ry, rz = (
+                rots[:, idx * 3],
+                rots[:, idx * 3 + 1],
+                rots[:, idx * 3 + 2],
+            )
+            r = rx @ ry @ rz  # Bx3x3
+            t = log_angles.new_zeros((B, 4, 4))
+            t[:, :3, :3] = r
+            t[:, 3, 3] = 1.0
+            fkt[v] = fkt[u] @ t @ self.tip_to_base[idx : idx + 1]
+        return torch.stack(fkt, 1)
 
 
 class Body:
@@ -164,32 +188,6 @@ class BodyBuilder:
         return Body(self.graph, roots[0], node_mapping)
 
 
-def fk(kin: BodyKinematics, log_angles: torch.FloatTensor):
-    body = kin.body
-    rots = R.exp_map(log_angles, kin.rot_axes, kin.rot_constraints)
-    B = log_angles.shape[0]  # number of samples
-    N = body.graph.number_of_nodes()
-
-    fkt = [None] * N
-    e = torch.eye(4, device=utheta.device, dtype=utheta.dtype)
-    e = e.reshape((1, 4, 4))
-    e = e.repeat((B, 1, 1))
-    fkt[body.root] = e
-
-    for idx, (u, v) in enumerate(body.bfs_edges):
-        rx, ry, rz = (
-            rots[:, idx * 3],
-            rots[:, idx * 3 + 1],
-            rots[:, idx * 3 + 2],
-        )
-        r = rx @ ry @ rz  # Bx3x3
-        t = utheta.new_zeros((B, 4, 4))
-        t[:, :3, :3] = r
-        t[:, 3, 3] = 1.0
-        fkt[v] = fkt[u] @ t @ kin.tip_to_base[idx : idx + 1]
-    return torch.stack(fkt, 1)
-
-
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import numpy as np
@@ -226,9 +224,8 @@ if __name__ == "__main__":
     body = b.finalize(["root", "a", "b", "c", "d", "e"])
 
     kin = body.kinematics().cuda()
-    utheta = kin.rest_pose()
-    print(utheta.device)
-    poses = fk(kin, utheta).cpu()
+    utheta = kin.log_angles_rest_pose()
+    poses = kin.fk(utheta).cpu()
     print(poses)
 
     # poses = [body.fk()]
