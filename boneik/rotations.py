@@ -1,6 +1,5 @@
 from typing import Tuple, Optional, List
 import torch
-from torch._C import device, dtype
 import torch.nn.functional as F
 import numpy as np
 
@@ -157,7 +156,7 @@ def _exp_map(
         interpretable as z[i,j] = cos(theta) + i sin(theta)
     """
     # Unit box
-    z = torch.tanh(uz)
+    z = F.tanh(uz)
     z = F.pad(z, (0, 1), "constant", 1).unsqueeze(-1)  # (B,N,3,1)
     # Apply constraint
 
@@ -205,5 +204,6 @@ def log_map(
 ) -> torch.FloatTensor:
     z = F.pad(z, (0, 1), "constant", 1).unsqueeze(-1)  # (B,N,3,1)
     z = torch.matmul(inv_constraints.unsqueeze(0), z).squeeze(-1)
-    zu = torch.atanh(z[..., :2])
-    return zu
+    return z[..., :2]
+    # zu = torch.atanh(z[..., :2])
+    return z
