@@ -2,14 +2,14 @@ import matplotlib.pyplot as plt
 import transformations as T
 import torch
 
-from boneik import kinematics, solvers, criteria
+from boneik import bodies, ik_solvers, ik_criteria
 from boneik.reparametrizations import PI
 
 
-def draw(ax, body: kinematics.Body):
+def draw(ax, kin: bodies.BodyKinematics, log_angles: torch.FloatTensor):
     with torch.no_grad():
-        fk = body.fk()
-        for u, v in body.bfs_edges:
+        fk = kin.fk(log_angles).squeeze(0)
+        for u, v in kin.body.bfs_edges:
             tu = fk[u][:2, 3].numpy()
             tv = fk[v][:2, 3].numpy()
             ax.plot([tu[0], tv[0]], [tu[1], tv[1]], c="green")
@@ -20,7 +20,7 @@ def draw(ax, body: kinematics.Body):
 
 
 def main():
-    b = kinematics.BodyBuilder()
+    b = bodies.BodyBuilder()
     b.add_bone(
         0,
         1,
@@ -43,31 +43,42 @@ def main():
         dofs={"rz": (-PI / 2, PI / 2)},
     )
     body = b.finalize()
+    kin = body.kinematics()
     N = body.graph.number_of_nodes()
-    solver = solvers.IKSolver(body)
+
     fig, ax = plt.subplots()
 
     anchors = torch.zeros(N, 3)
     weights = torch.zeros(N)
-    crit = criteria.EuclideanDistanceCriterium(anchors, weights)
+    crit = ik_criteria.EuclideanDistanceCriterium(anchors, weights)
+
+    log_angles = kin.log_angles_rest_pose().requires_grad_(True)
 
     def on_move(event):
+        nonlocal log_angles
         if not event.inaxes:
             return
         loc = torch.tensor([event.xdata, event.ydata, 0]).float()
         crit.anchors[-1] = loc
         crit.weights[-1] = 1.0
-        loss = solver.solve(
-            crit, min_abs_change=0.01, history_size=5, max_iter=5, lr=1e-1
+        loss = ik_solvers.solve_ik(
+            kin,
+            log_angles,
+            crit,
+            min_abs_change=0.01,
+            history_size=5,
+            max_iter=5,
+            lr=1e-1,
         )
         if loss > 1.0:
-            body.reset_()
-            solver.solve(crit, lr=1e-1)
+            # retry from rest-pose
+            log_angles = kin.log_angles_rest_pose().requires_grad_(True)
+            ik_solvers.solve_ik(kin, log_angles, crit, lr=1e-1)
         ax.cla()
-        draw(event.inaxes, body)
+        draw(event.inaxes, kin, log_angles)
         fig.canvas.draw_idle()
 
-    draw(ax, body)
+    draw(ax, kin, log_angles)
     fig.canvas.mpl_connect("motion_notify_event", on_move)
     plt.show()
 
