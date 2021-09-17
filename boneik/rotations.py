@@ -156,7 +156,7 @@ def _exp_map(
         interpretable as z[i,j] = cos(theta) + i sin(theta)
     """
     # Unit box
-    z = F.tanh(uz)
+    z = torch.tanh(uz)
     z = F.pad(z, (0, 1), "constant", 1).unsqueeze(-1)  # (B,N,3,1)
     # Apply constraint
 
