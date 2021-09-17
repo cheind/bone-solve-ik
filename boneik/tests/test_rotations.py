@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 from boneik import rotations as R
-import transformations as T
 
 
 def test_rodrigues():
