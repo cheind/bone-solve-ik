@@ -3,12 +3,12 @@ import numpy as np
 import torch
 import pickle
 from tqdm import tqdm
-from boneik import kinematics, solvers, utils, draw, criteria, io
+from boneik import bodies, ik_solvers, utils, draw, ik_criteria, io
 from boneik import bvh
 
 
-def create_human_body() -> kinematics.Body:
-    b = kinematics.BodyBuilder()
+def create_human_body() -> bodies.Body:
+    b = bodies.BodyBuilder()
     b.add_bone(
         "torso",
         "chest",
@@ -161,47 +161,44 @@ def main():
         body = io.load_json(args.body)
     else:
         body = create_human_body()
+    kin = body.kinematics()
     N = body.graph.number_of_nodes()
-    frame_data = pickle.load(open(r"C:\dev\bone-solve-ik\etc\frames_raw.pkl", "rb"))
+    frame_data = pickle.load(open(args.input, "rb"))
     if args.scale is not None:
         scale_factor = utils.find_scale_factor(frame_data[0]) * args.scale
     else:
         scale_factor = 1.0
 
-    poses = [body.fk()]  # important to start from rest-pose for bvh export.
+    log_angles = kin.log_angles_rest_pose().requires_grad_(True)
 
-    solver = solvers.IKSolver(body)
+    poses = [
+        kin.fk(log_angles.detach())[0]
+    ]  # important to start from rest-pose for bvh export.
+
     if args.crit == "parallel":
-        crit = criteria.ParallelSegmentCriterium(torch.zeros((N, 3)), torch.ones(N))
+        crit = ik_criteria.ParallelSegmentCriterium(torch.zeros((N, 3)), torch.ones(N))
     else:
-        crit = criteria.EuclideanDistanceCriterium(torch.zeros((N, 3)), torch.ones(N))
+        crit = ik_criteria.EuclideanDistanceCriterium(
+            torch.zeros((N, 3)), torch.ones(N)
+        )
     crit.weights[-1] = 0  # root joint never has a corresponding anchor.
 
     axes_ranges = [[-20, 20], [-20, 20], [-2, 5]]
     fig, ax = draw.create_figure3d(axes_ranges=axes_ranges)
-    prev_pose = body.fk()
+    prev_pose = poses[0]
     for i in tqdm(range(0, len(frame_data), args.input_step)):
         crit.anchors[: N - 1] = torch.from_numpy(frame_data[i]).float() * scale_factor
         torso = crit.anchors[-3].clone()
         crit.anchors[: N - 1] -= torso  # torso at 0/0/0
-        loss = solver.solve(crit, history_size=10, max_iter=10)
+        # Attempt to solve from prev. angles
+        loss = ik_solvers.solve_ik(kin, log_angles, crit, history_size=10, max_iter=10)
         if loss > args.max_loss:
             # retry from rest-pose
-            body.reset_()
-            loss = solver.solve(crit)
+            log_angles = kin.log_angles_rest_pose().requires_grad_(True)
+            loss = ik_solvers.solve_ik(kin, log_angles, crit)
         if loss < args.max_loss:
-            delta = body["root", "torso"].get_delta()
-            body["root", "torso"].set_delta(
-                [
-                    delta[0],
-                    delta[1],
-                    delta[2],
-                    torso[0],
-                    torso[1],
-                    torso[2],
-                ]
-            )
-            new_pose = body.fk()
+            new_pose = kin.fk(log_angles.detach())[0]
+            new_pose[:, :3, 3] += torso.view(1, 3)
             poses.append(new_pose)
             prev_pose = new_pose
         else:
@@ -216,7 +213,7 @@ def main():
             draw.draw_kinematics(
                 ax,
                 body=body,
-                fk=body.fk(),
+                fk=poses[-1],
                 anchors=crit.anchors,
                 draw_vertex_labels=False,
                 draw_local_frames=False,

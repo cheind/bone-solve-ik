@@ -6,7 +6,6 @@ import torch.nn
 import networkx as nx
 import torch
 import torch.nn
-from torch.nn.parameter import Parameter
 
 from . import rotations as R
 
@@ -67,11 +66,10 @@ class BodyKinematics(torch.nn.Module):
             for rstr in ["rx", "ry", "rz"]:
                 unlocked = rstr in b.dof_dict
                 rot_unlock_mask.append(unlocked)
-                angle_range = (
-                    torch.as_tensor(b.dof_dict[rstr]).float()
-                    if unlocked
-                    else R.UNCONSTRAINED_RANGE
-                )
+                if unlocked:
+                    angle_range = torch.as_tensor(b.dof_dict[rstr]).float()
+                else:
+                    angle_range = R.UNCONSTRAINED_RANGE
                 rot_ranges.append(angle_range)
                 c, cinv = R.affine_constraint(angle_range)
                 rot_constraints.append(c)
@@ -165,7 +163,7 @@ class BodyBuilder:
         if tip_to_base is None:
             tip_to_base = torch.eye(4)
         if isinstance(dofs, set):
-            dofs = {d: None for d in dofs}
+            dofs = {d: R.UNCONSTRAINED_RANGE for d in dofs}
         elif dofs is None:
             dofs = {}
         self.graph.add_edge(u, v, bone=Bone(tip_to_base, dof_dict=dofs))
