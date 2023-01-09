@@ -13,18 +13,18 @@ with open(THISDIR / "README.md", encoding="utf-8") as f:
     long_description = f.read()
 
 main_ns = {}
-with open(THISDIR / "globalflow" / "__version__.py") as ver_file:
+with open(THISDIR / "boneik" / "__version__.py") as ver_file:
     exec(ver_file.read(), main_ns)
 
 setup(
-    name="py-globalflow",
+    name="boneik-solve-ik",
     author="Christoph Heindl",
-    description="Pure Python implementation of Global Data Association for MOT Tracking using Network Flows with minor tweaks.",
+    description="Fitting kinematic parameters to best align with set of noisy anchor points in Python.",
     license="MIT",
     long_description=long_description,
     long_description_content_type="text/markdown",
     version=main_ns["__version__"],
-    packages=find_packages(".", include="globalflow*"),
+    packages=find_packages(".", include="boneik*"),
     install_requires=common_required,
     zip_safe=False,
     extras_require={
